@@ -1,4 +1,5 @@
 #!/usr/bin/python
+## Author - Matteo Butano 
 
 import numpy as np
 import time
