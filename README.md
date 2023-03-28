@@ -1,4 +1,4 @@
-## Deep Galerkin Method for Pedestrian MFG
+# Deep Galerkin Method for Pedestrian MFG
 
 When considering the system of equations of the pedestrian MFG with both discount factor and congestion:
 $$\frac{\sigma^2}{2}\Delta{u} - \dfrac{(\vec{\nabla}u)^2}{2\mu (1+\alpha m )} -\lambda -\vec{s}\cdot\vec{\nabla}u -  \gamma u =  V[m] \qquad \text{(HJB)}$$
@@ -14,3 +14,9 @@ We consider a cylinder of radius $R=0.37$, and the initial condition for the mas
     $$\xi = \sqrt{\dfrac{\mu\sigma^4}{|2 g m_0|}}$$
     
    
+## Current code specs
+At the moment, we have the following settings: 
+1. We have imposed a mass preservation condition between the initial configuration (i.e. $m=2.5$ everywhere except for where the cylinder is) and the approximated mass via m_theta. This is done by adding an additional term to the loss function, having weight $0.1$. What happens is that this is compromising the training: there is no improvement once the conservation of mass discrepancy is around $1e-8$. 
+2. We are sampling points all over the room (and not excluding points where the cylinder is).
+3. We are imposing boundary conditions only on the room walls and not on the boundary of the cylinder, hoping that a potential $V$ high enough will do the job for us.
+4. TFC is temporarily out of the picture (sigh)
