@@ -11,6 +11,6 @@ where $\delta R$, $\delta C $ are the boundary of room and cylinder respectively
     $$m_B = m_0 $$
     $$u_B = -\mu\sigma^2 log(m_0)$$
 We consider a cylinder of radius $R=0.37$, and the initial condition for the mass of pedestrians $m_0 = 2.5$. This constant enters as the room boundary condition for $m$, since we assume that far away from the cylinder, the pedestrians are unaffected. A quantification of how much it is *far enough* can be computed by means of the *healing length*
-    $$\xi = abs(\sqrt{\dfrac{\mu\sigma^4}{2 g m_0})$$
+    $$\xi = \sqrt{\dfrac{\mu\sigma^4}{|2 g m_0|}}$$
     
    
