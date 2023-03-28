@@ -20,5 +20,5 @@ At the moment, we have the following settings:
 2. We are sampling points all over the room (and not excluding points where the cylinder is).
 3. We are imposing boundary conditions only on the room walls and not on the boundary of the cylinder, hoping that a potential $V$ high enough will do the job for us.
 4. TFC is temporarily out of the picture (sigh)
-5. The parameters are the one on mfg_pedestrian.py for reproducibility. 
+5. The parameters are the one on mfg_obstacle.py for reproducibility. 
 
