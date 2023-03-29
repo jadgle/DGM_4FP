@@ -22,3 +22,5 @@ At the moment, we have the following settings:
 4. TFC is temporarily out of the picture (sigh)
 5. The parameters are the one on mfg_obstacle.py for reproducibility. 
 
+## To do: 
+Try to solve the equation for $\Phi$ and $\Gamma$ instead.
