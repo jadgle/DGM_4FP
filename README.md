@@ -16,11 +16,12 @@ We consider a cylinder of radius $R=0.37$, and the initial condition for the mas
    
 ## Current code specs
 At the moment, we have the following settings: 
-1. We have imposed a mass preservation condition between the initial configuration (i.e. $m=2.5$ everywhere except for where the cylinder is) and the approximated mass via m_theta. This is done by adding an additional term to the loss function, having weight $0.1$. What happens is that this is compromising the training: there is no improvement once the conservation of mass discrepancy is around $1e-8$. 
-2. We are sampling points all over the room (and not excluding points where the cylinder is).
+1. We have imposed a mass preservation condition between the initial configuration (i.e. $m_0=2.5$ everywhere) and the approximated mass via m_theta. This is done by adding an additional term to the loss function, having weight $0.01$. 
+2. We are sampling points all over the room and  excluding points where the cylinder is.
 3. We are imposing boundary conditions only on the room walls and not on the boundary of the cylinder, hoping that a potential $V$ high enough will do the job for us.
 4. TFC is temporarily out of the picture (sigh)
 5. The parameters are the one on mfg_obstacle.py for reproducibility. 
 
+This approach was leading to a very promising decay in the loss function (which reached $1e-20$) but this was associated with a null value function. Now we are trying the same approach but with a different potential value ($V=10^3$ instead of $V=10^2$). The training is looking better, stay tuned.
 ## To do: 
 Try to solve the equation for $\Phi$ and $\Gamma$ instead.
