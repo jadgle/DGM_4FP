@@ -1,10 +1,20 @@
+##################################################################################################################
+#########################                                                            #############################       
+#########################               Main - DGM for pedestrian MFG                #############################
+#########################                                                            #############################
+##################################################################################################################
+
 import matplotlib.pyplot as plt
 import tensorflow as tf
 import matplotlib
-from dgm_library import warmstart, sample_room, init_DGM, train, env_initializing, thick_room, sample_room_polar, train_TFC, warmstart_TFC
+from dgm_library import warmstart, sample_room, init_DGM, train, env_initializing, thick_room, warmstart_room, train_room
+from dgm_library_wTFC import env_initializing, sample_room_polar, train_TFC, warmstart_TFC
+
 from DGM import * # NOQA
 import numpy as np
 import keras
+import pandas as pd
+from tensorflow.python.ops.numpy_ops import np_config
 
 env_initializing()
 
@@ -41,17 +51,56 @@ B = 10
 
 verbose=1
 
-u_theta = init_DGM(RNN_layers = 1, FNN_layers=1, nodes_per_layer=4,activation="tanh")
-m_theta = init_DGM(RNN_layers = 1, FNN_layers=1, nodes_per_layer=4,activation="tanh")
-m_theta, u_theta = warmstart(u_theta,m_theta,verbose=2)
-m_theta, u_theta = train(u_theta,m_theta,verbose=2)
-X0 = thick_room(0)
-x = X0.iloc([0])
-y = X0.iloc([1])
+u_theta = init_DGM(RNN_layers = 0, FNN_layers=1, nodes_per_layer=10,activation="tanh")
+m_theta = init_DGM(RNN_layers = 0, FNN_layers=1, nodes_per_layer=10,activation="tanh")
+
+N_s = 500
+x = np.linspace(-6, 6, N_s)
+y = np.linspace(-12, 12, N_s)
+X, Y = np.meshgrid(x, y)
+x_ = X.reshape((N_s**2,1))
+y_ = Y.reshape((N_s**2,1))
+X0 = pd.DataFrame(np.concatenate([x_,y_],1))    
+
+m_theta, u_theta = warmstart_room(u_theta,m_theta,2,X0)
+m_theta, u_theta = train_room(u_theta,m_theta,2,X0)
+
+np_config.enable_numpy_behavior()
+               
+# X0 = thick_room(0)
+# x = X0.iloc[:,0]
+# y = X0.iloc[:,1]
 m = m_theta(X0)
 u = u_theta(X0)
 
+usual = matplotlib.cm.hot_r(np.arange(256))
+saturate = np.ones((int(256 / 20), 4))
+for i in range(3):
+    saturate[:, i] = np.linspace(usual[-1, i], 0, saturate.shape[0])
+cmap1 = np.vstack((usual, saturate))
+cmap1 = matplotlib.colors.ListedColormap(cmap1, name='myColorMap', N=cmap1.shape[0])
 
+fig = plt.figure(figsize=(7,6))
+#plt.scatter(x, y, c=m, cmap=cmap1, marker='.', alpha=0.3)
+
+x_ = x_.reshape(1000,1000)
+y_ = y_.reshape(1000,1000)
+m = m.reshape(1000,1000)
+u = u.reshape(1000,1000)
+plt.contourf(x_, y_, m, 100, cmap=cmap1)
+plt.xlabel('$x$')
+plt.ylabel('$y$')
+plt.colorbar()
+plt.show()
+
+fig = plt.figure(figsize=(7,6))
+plt.contourf(x_, y_, u, 100, cmap=cmap1)
+plt.xlabel('$x$')
+plt.ylabel('$y$')
+plt.colorbar()
+plt.show()
+
+############################################################################################
 # solution via TFC - not updated!
 # f_theta = init_DGM(RNN_layers = 2, FNN_layers=0, nodes_per_layer=10,activation="tanh")
 # g_theta = init_DGM(RNN_layers = 2, FNN_layers=0, nodes_per_layer=10,activation="tanh")
@@ -62,27 +111,6 @@ u = u_theta(X0)
 # u = -tf.math.log(v)
 # x = rho.numpy()*np.cos(theta)
 # y = rho.numpy()*np.sin(theta)
-
-usual = matplotlib.cm.hot_r(np.arange(256))
-saturate = np.ones((int(256 / 20), 4))
-for i in range(3):
-    saturate[:, i] = np.linspace(usual[-1, i], 0, saturate.shape[0])
-cmap1 = np.vstack((usual, saturate))
-cmap1 = matplotlib.colors.ListedColormap(cmap1, name='myColorMap', N=cmap1.shape[0])
-
-fig = plt.figure(figsize=(7,6))
-plt.scatter(x, y, c=m, cmap=cmap1, marker='.', alpha=0.3)
-plt.xlabel('$x$')
-plt.ylabel('$y$')
-plt.colorbar()
-plt.show()
-
-fig = plt.figure(figsize=(7,6))
-plt.scatter(x, y, c=u, cmap=cmap1, marker='.', alpha=0.3)
-plt.xlabel('$x$')
-plt.ylabel('$y$')
-plt.colorbar()
-plt.show()
 
 #f_theta_trained, g_theta_trained = train_TFC(f_theta,g_theta,verbose=10)
 
