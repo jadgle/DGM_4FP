@@ -94,9 +94,7 @@ def V(Phi,Gamma, x):
 ########################################################################################################################
 
 def sample_room(verbose):
-    
     # number of points
-    N_0 = 200
     N_b = 500
     N_s = 5000
     
@@ -169,18 +167,15 @@ def train(Phi_theta,Gamma_theta,verbose):
     print('round-it           loss')
     for i in range(sampling_stages):
             X_b, X_s, X_c = sample_room(0)
-            
-            
             print('-----------------------------------------------')
             # for a given sample, take the prescribed number of training steps
             for j in range(steps_per_sample):
-                loss_Phi = train_step_Phi(Phi_theta,Gamma_theta, optimizer_Phi, X_b, X_s, X_c)
+                loss_Phi   = train_step_Phi(Phi_theta,Gamma_theta, optimizer_Phi, X_b, X_s, X_c)
                 loss_Gamma = train_step_Gamma(Phi_theta,Gamma_theta, optimizer_Gamma, X_b, X_s, X_c)
-                hist.append(loss_Gamma.numpy())
+                hist.append(np.mean(np.array[loss_Gamma,loss_Phi]))
                 if verbose > 0:
                     if j % 50 == 0:
                         print(' {:01d}-{:04d}          {:10.4e}'.format(i+1,j,loss_Gamma))
-            
     if verbose > 1: # optional plotting of the loss function
         plt.figure(figsize=(5,5))
         plt.plot(range(len(hist[50:-1])), hist[50:-1],'k-')
@@ -289,16 +284,15 @@ def compute_loss(Phi_theta,Gamma_theta, X_b, X_s, X_c):
     # Gamma_cilinder = Gamma_theta(X_r)
     # Gamma_bC = tf.reduce_mean(tf.square(Gamma_cilinder))
 
-
     #current_total_mass =  tf.math.reduce_mean(tf.multiply(Gamma_theta(X_s),Phi_theta(X0))) * (xmax-xmin) * (ymax-ymin)
     # mass constraint 
     # total mass in the initial condition
     
-    m_Cyl = tf.reduce_mean(tf.multiply(Gamma_theta(X_c),Phi_theta(X_c)))
+    m_Cyl = tf.reduce_mean(tf.square(Gamma_theta(X_c)))+tf.reduce_mean(tf.square(Phi_theta(X_c)))
     
     #mass_conservation = tf.square(current_total_mass-initial_tot_mass)
     
-    return r_Phi+r_Gamma+m_bRoom + m_Cyl# + mass_conservation
+    return r_Phi + r_Gamma + m_bRoom + m_Cyl# + mass_conservation
 
 
 ########################################################################################################################

@@ -9,7 +9,7 @@ import tensorflow as tf
 import matplotlib
 #from dgm_library import warmstart, sample_room, init_DGM, train, env_initializing, thick_room, warmstart_room, train_room
 #from dgm_library_wTFC import env_initializing, sample_room_polar, train_TFC, warmstart_TFC
-from dgm_library_ergotic import env_initializing, sample_room, init_DGM, train
+from dgm_library_ergodic import env_initializing, sample_room, init_DGM, train
 
 from DGM import * # NOQA
 import numpy as np
