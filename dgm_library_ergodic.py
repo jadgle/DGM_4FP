@@ -194,7 +194,7 @@ def train(Phi_theta,Gamma_theta,verbose):
 ########################################################################################################################
 # function that computes the derivatives using automatic differentiation
 # and uses them to evaluate the residuals of the FP and HJB eqs
-def get_r(u_theta,m_theta, X_s):
+def get_residuals(u_theta,m_theta, X_s):
     x = X_s
     with tf.GradientTape(persistent=True) as tape1:
         x_unstacked = tf.unstack(x, axis=1)
@@ -248,11 +248,11 @@ def get_r(u_theta,m_theta, X_s):
     du = tf.cast(tf.reshape(du, shape=(du.shape[0], 2)), dtype=DTYPE)
     dm = tf.cast(tf.reshape(dm, shape=(dm.shape[0], 2)), dtype=DTYPE)
     
-    residual_Phi = res_Phi(x,m,dm,laplacian_m,u,du,laplacian_u)
-    residual_Gamma= res_Gamma(x,m,dm,laplacian_m,u,du,laplacian_u)
+    res_Phi = residual_Phi(x,m,dm,laplacian_m,u,du,laplacian_u)
+    res_Gamma= residual_Gamma(x,m,dm,laplacian_m,u,du,laplacian_u)
     
     # the weights M_HJB and M_FP are the ones inspired from Anastasia's paper
-    return residual_Phi, residual_Gamma
+    return res_Phi, res_Gamma
 
 
 ########################################################################################################################
