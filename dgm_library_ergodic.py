@@ -79,7 +79,7 @@ def env_initializing():
 # def V(Phi,Gamma, x):
 #     U0 = np.zeros(shape = (x.shape[0],1))
 #     for i in range(x.shape[0]):
-#         if fun2(x[i]): # for points in the cilinder
+#         if tf.less_equal(tf.norm(x[i],'euclidean'),R): # for points in the cilinder
 #             U0[i] = V_const   # we have higher cost
 #     U0 = tf.convert_to_tensor(U0, dtype=DTYPE)
 #     return g * tf.multiply(Phi,Gamma) + U0 # formula for the potential from reference paper
@@ -282,7 +282,7 @@ def residual_Phi(points, Gamma, Gamma_x, Gamma_xx, Phi, Phi_x, Phi_xx):
 
 def compute_loss(Phi_theta,Gamma_theta, X_b, X_s, X_c):
     
-    r_Phi, r_Gamma = get_r(Phi_theta,Gamma_theta, X_s) # we compute the residuals
+    r_Phi, r_Gamma = get_residuals(Phi_theta,Gamma_theta, X_s) # we compute the residuals
     
     #  we consider the weights used on the report on overleaf
     m_boundary = tf.multiply(Gamma_theta(X_b),Phi_theta(X_b))
