@@ -7,7 +7,6 @@
 
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib
 import tensorflow as tf
 import numpy as np
 import random
@@ -79,14 +78,11 @@ def env_initializing():
 
 # Potential V entering the HJB equation. The value V_const is a parameter defined above
 def V(Phi,Gamma, x):
-    U0 = tf.zeros(shape = (x.shape[0],1),dtype=DTYPE)
-    U0 = tf.unstack(U0)
+    U0 = np.zeros(shape = (x.shape[0],1))
     for i in range(x.shape[0]):
         if tf.less_equal(tf.norm(x[i],'euclidean'),R): # for points in the cilinder
-            U0[i] = tf.constant(V_const,dtype=DTYPE)   # we have higher cost
-        else:
-            U0[i] = tf.constant(0,dtype=DTYPE)
-    U0 = tf.stack(U0)
+            U0[i] = V_const   # we have higher cost
+    U0 = tf.convert_to_tensor(U0, dtype=DTYPE)
     return g * tf.multiply(Phi,Gamma) + U0 # formula for the potential from reference paper
 
 
