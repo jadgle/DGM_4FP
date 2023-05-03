@@ -24,15 +24,15 @@ mu    = 1
 gamma = 0
 m0    = 2.5
 alpha = 0
-R     = 0.37
+R     = tf.constant(0.37,dtype=DTYPE)
 V_const = -10e2
 
 # room limits (changed on march 2023 to be bigger)
-xmin = -6.
-xmax = 6.
-ymin = -12.
-ymax = 12.
-initial_tot_mass = tf.constant(2.5 * (xmax-xmin) * (ymax-ymin),dtype=DTYPE)
+xmin = -4.
+xmax = 4.
+ymin = -8.
+ymax = 8.
+initial_tot_mass = tf.constant(m0 * (xmax-xmin) * (ymax-ymin),dtype=DTYPE)
 
 l     = -((g*m0)/(1+alpha*m0))+(gamma*mu*sigma**2*np.log(np.sqrt(m0)))
 s     =  tf.constant([0, -0.6],  dtype=DTYPE, shape=(1, 2))
@@ -75,15 +75,25 @@ def env_initializing():
 
 
 ########################################################################################################################
-
 # Potential V entering the HJB equation. The value V_const is a parameter defined above
+# def V(Phi,Gamma, x):
+#     U0 = np.zeros(shape = (x.shape[0],1))
+#     for i in range(x.shape[0]):
+#         if fun2(x[i]): # for points in the cilinder
+#             U0[i] = V_const   # we have higher cost
+#     U0 = tf.convert_to_tensor(U0, dtype=DTYPE)
+#     return g * tf.multiply(Phi,Gamma) + U0 # formula for the potential from reference paper
+
 def V(Phi,Gamma, x):
-    U0 = np.zeros(shape = (x.shape[0],1))
+    U0 = tf.zeros(shape = (x.shape[0],1),dtype=DTYPE)
+    U0 = tf.unstack(U0)
     for i in range(x.shape[0]):
         if tf.less_equal(tf.norm(x[i],'euclidean'),R): # for points in the cilinder
-            U0[i] = V_const   # we have higher cost
-    U0 = tf.convert_to_tensor(U0, dtype=DTYPE)
+            U0[i] = tf.constant(V_const,dtype=DTYPE)   # we have higher cost
+    U0 = tf.stack(U0)
     return g * tf.multiply(Phi,Gamma) + U0 # formula for the potential from reference paper
+
+
 
 
 
@@ -91,14 +101,14 @@ def V(Phi,Gamma, x):
 
 def sample_room(verbose):
     # number of points
-    N_b = 500
-    N_s = 5000
+    N_b = 200
+    N_s = 4000
     
     # room limits (changed on march 2023 to be bigger)
-    xmin = -6.
-    xmax = 6.
-    ymin = -12.
-    ymax = 12.
+    xmin = -4.
+    xmax = 4.
+    ymin = -8.
+    ymax = 8.
 
     # Lower bounds
     lb = tf.constant([xmin, ymin], dtype=DTYPE)
@@ -151,13 +161,13 @@ def init_DGM(RNN_layers, FNN_layers, nodes_per_layer, activation):
 
 def train(Phi_theta,Gamma_theta,verbose):
     # the learning rate and the optimizer are hyperparameters, we can change them to obtain better results
-    learning_rate = tf.keras.optimizers.schedules.PiecewiseConstantDecay([200, 300, 1200], [1e-1, 7e-2, 5e-2, 1e-2])
+    learning_rate = tf.keras.optimizers.schedules.PiecewiseConstantDecay([100, 500], [1e-1, 7e-2, 5e-2])
     optimizer_Phi = tf.optimizers.Adam(learning_rate=learning_rate)
     optimizer_Gamma = tf.optimizers.Adam(learning_rate=learning_rate)
 
 
     # Train network - we sample a new room for each sampling stage 
-    sampling_stages = 1
+    sampling_stages = 3
     steps_per_sample = 1001
     hist = []
     print('round-it           loss')
@@ -238,17 +248,17 @@ def get_r(u_theta,m_theta, X_s):
     du = tf.cast(tf.reshape(du, shape=(du.shape[0], 2)), dtype=DTYPE)
     dm = tf.cast(tf.reshape(dm, shape=(dm.shape[0], 2)), dtype=DTYPE)
     
-    resHJB = res_HJB(x,m,dm,laplacian_m,u,du,laplacian_u)
-    resFP = res_FP(x,m,dm,laplacian_m,u,du,laplacian_u)
+    residual_Phi = res_Phi(x,m,dm,laplacian_m,u,du,laplacian_u)
+    residual_Gamma= res_Gamma(x,m,dm,laplacian_m,u,du,laplacian_u)
     
     # the weights M_HJB and M_FP are the ones inspired from Anastasia's paper
-    return resHJB, resFP
+    return residual_Phi, residual_Gamma
 
 
 ########################################################################################################################
 
 # residual of the Fokker Plank
-def res_FP(points, Gamma, Gamma_x, Gamma_xx, Phi, Phi_x, Phi_xx):
+def residual_Gamma(points, Gamma, Gamma_x, Gamma_xx, Phi, Phi_x, Phi_xx):
     term1 = mu*sigma**2*tf.reduce_sum(tf.multiply(s, Gamma_x),1) 
     term2 = ((mu*sigma**4)/2)*Gamma_xx 
     term_pot = tf.multiply(V(Gamma,Phi,points),Gamma)
@@ -259,7 +269,7 @@ def res_FP(points, Gamma, Gamma_x, Gamma_xx, Phi, Phi_x, Phi_xx):
     return tf.reduce_mean(tf.square(resFP))
 
 # residual of the HJB
-def res_HJB(points, Gamma, Gamma_x, Gamma_xx, Phi, Phi_x, Phi_xx):
+def residual_Phi(points, Gamma, Gamma_x, Gamma_xx, Phi, Phi_x, Phi_xx):
     term1 = -mu*sigma**2*tf.reduce_sum(tf.multiply(s, Phi_x),1) 
     term2 = ((mu*sigma**4)/2)*Phi_xx 
     term_pot = tf.multiply(V(Gamma,Phi,points),Phi)
@@ -294,44 +304,44 @@ def compute_loss(Phi_theta,Gamma_theta, X_b, X_s, X_c):
 ########################################################################################################################
 
 # gradient of the loss function with respect to the unknown variables in the model, also called `trainable variables`
-def get_grad(u_theta,m_theta, X_b, X_s, X_c, target):
-    if target == 'FP':
+def get_grad(Phi,Gamma, X_b, X_s, X_c, target):
+    if target == 'Gamma':
         with tf.GradientTape(persistent=True) as tape:
             # This tape is for derivatives with
             # respect to trainable variables
-            tape.watch(m_theta.trainable_variables)
-            loss = compute_loss(u_theta,m_theta, X_b, X_s, X_c)
+            tape.watch(Gamma.trainable_variables)
+            loss = compute_loss(Phi,Gamma, X_b, X_s, X_c)
 
-        g = tape.gradient(loss, m_theta.trainable_variables)
+        g = tape.gradient(loss, Gamma.trainable_variables)
         del tape
         return loss, g
-    elif target == 'HJB':
+    elif target == 'Phi':
         with tf.GradientTape(persistent=True) as tape:
             # This tape is for derivatives with
             # respect to trainable variables
-            tape.watch(u_theta.trainable_variables)
-            loss = compute_loss(u_theta, m_theta, X_b, X_s, X_c)
+            tape.watch(Phi.trainable_variables)
+            loss = compute_loss(Phi,Gamma, X_b, X_s, X_c)
 
-        g = tape.gradient(loss, u_theta.trainable_variables)
+        g = tape.gradient(loss, Phi.trainable_variables)
         del tape
         return loss, g
 ########################################################################################################################
 
 # Define one training step as a TensorFlow function to increase speed of training
 @tf.function
-def train_step_Phi(u,m, optim, X_b, X_s, X_c):
+def train_step_Phi(Phi,Gamma, optim, X_b, X_s, X_c):
     # Compute current loss and gradient w.r.t. parameters
-    loss_u, grad_theta_u = get_grad(u,m, X_b, X_s, X_c, 'HJB')
+    loss_Phi, grad_theta_Phi = get_grad(Phi,Gamma, X_b, X_s, X_c, 'Phi')
     # Perform gradient descent step
-    optim.apply_gradients(zip(grad_theta_u, u.trainable_variables))
-    return loss_u
+    optim.apply_gradients(zip(grad_theta_Phi, Phi.trainable_variables))
+    return loss_Phi
 
 @tf.function
-def train_step_Gamma(u,m, optim, X_b, X_s, X_c):
+def train_step_Gamma(Phi,Gamma, optim, X_b, X_s, X_c):
     # Compute current loss and gradient w.r.t. parameters
-    loss_m, grad_theta_m = get_grad(u,m, X_b, X_s, X_c, 'FP')
+    loss_Gamma, grad_theta_Gamma = get_grad(Phi,Gamma, X_b, X_s, X_c, 'Gamma')
     # Perform gradient descent step
-    optim.apply_gradients(zip(grad_theta_m, m.trainable_variables))
-    return loss_m
+    optim.apply_gradients(zip(grad_theta_Gamma, Gamma.trainable_variables))
+    return loss_Gamma
 
 
