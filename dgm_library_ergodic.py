@@ -161,7 +161,7 @@ def train(Phi_theta,Gamma_theta,verbose):
 
 
     # Train network - we sample a new room for each sampling stage 
-    sampling_stages = 5
+    sampling_stages = 1
     steps_per_sample = 1001
     hist = []
     print('round-it           loss')
@@ -172,7 +172,7 @@ def train(Phi_theta,Gamma_theta,verbose):
             for j in range(steps_per_sample):
                 loss_Phi   = train_step_Phi(Phi_theta,Gamma_theta, optimizer_Phi, X_b, X_s, X_c)
                 loss_Gamma = train_step_Gamma(Phi_theta,Gamma_theta, optimizer_Gamma, X_b, X_s, X_c)
-                hist.append(np.mean(np.array[loss_Gamma,loss_Phi]))
+                hist.append(np.mean(np.array([loss_Gamma,loss_Phi])))
                 if verbose > 0:
                     if j % 50 == 0:
                         print(' {:01d}-{:04d}          {:10.4e}'.format(i+1,j,loss_Gamma))
@@ -182,7 +182,7 @@ def train(Phi_theta,Gamma_theta,verbose):
         plt.xlabel('$n_{epoch}$')
         plt.title('Loss: residuals of the PDEs')
         plt.show()
-    return Phi_theta,Gamma_theta
+    return Phi_theta,Gamma_theta, X_b, X_s, X_c
 
 
 ########################################################################################################################

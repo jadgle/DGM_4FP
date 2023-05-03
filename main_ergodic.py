@@ -62,9 +62,38 @@ y_ = Y.reshape((N_s**2,1))
 X0 = pd.DataFrame(np.concatenate([x_,y_],1))    
 X0 = X0.astype
 
-Phi_theta,Gamma_theta = train(Phi_theta,Gamma_theta,2)
+Phi_theta,Gamma_theta,X_b, X_s, X_c = train(Phi_theta,Gamma_theta,2)
 
                
+
+# usual = matplotlib.cm.hot_r(np.arange(256))
+# saturate = np.ones((int(256 / 20), 4))
+# for i in range(3):
+#     saturate[:, i] = np.linspace(usual[-1, i], 0, saturate.shape[0])
+# cmap1 = np.vstack((usual, saturate))
+# cmap1 = matplotlib.colors.ListedColormap(cmap1, name='myColorMap', N=cmap1.shape[0])
+
+# fig = plt.figure(figsize=(7,6))
+# #plt.scatter(x, y, c=m, cmap=cmap1, marker='.', alpha=0.3)
+
+# np_config.enable_numpy_behavior()
+# x_ = x_.reshape(50,50)
+# y_ = y_.reshape(50,50)
+# Phi = Phi_theta(X0)
+# Gamma = Gamma_theta(X0)
+# m = Phi*Gamma
+# m = m.reshape(50,50)
+# plt.contourf(x_, y_, m, 100, cmap=cmap1)
+# plt.xlabel('$x$')
+# plt.ylabel('$y$')
+# plt.colorbar()
+# plt.show()
+
+X0 = pd.concat([X_b,X_s,X_c], 0)
+x = X0.iloc[0]
+y = X0.iloc[1]
+m = Gamma_theta(X0)*Phi_theta(X0)
+
 
 usual = matplotlib.cm.hot_r(np.arange(256))
 saturate = np.ones((int(256 / 20), 4))
@@ -74,16 +103,7 @@ cmap1 = np.vstack((usual, saturate))
 cmap1 = matplotlib.colors.ListedColormap(cmap1, name='myColorMap', N=cmap1.shape[0])
 
 fig = plt.figure(figsize=(7,6))
-#plt.scatter(x, y, c=m, cmap=cmap1, marker='.', alpha=0.3)
-
-np_config.enable_numpy_behavior()
-x_ = x_.reshape(50,50)
-y_ = y_.reshape(50,50)
-Phi = Phi_theta(X0)
-Gamma = Gamma_theta(X0)
-m = Phi*Gamma
-m = m.reshape(50,50)
-plt.contourf(x_, y_, m, 100, cmap=cmap1)
+plt.scatter(x, y, c=m, cmap=cmap1, marker='.', alpha=0.3)
 plt.xlabel('$x$')
 plt.ylabel('$y$')
 plt.colorbar()
