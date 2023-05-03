@@ -18,28 +18,32 @@ from DGM import  DGMNet
 DTYPE = 'float32'
 
 # Problem parameters
-sigma = 0.35
-g     = -0.005
+V_const = -10
+
+sigma =  0.28# 0.35 # 0.28 (grid -4,4)
+g     = -0.03#-0.005 # -0.03
 mu    = 1
 gamma = 0
 m0    = 2.5
 alpha = 0
-R     = tf.constant(0.37,dtype=DTYPE)
-V_const = -10e2
-
-# room limits (changed on march 2023 to be bigger)
-xmin = -4.
-xmax = 4.
-ymin = -8.
-ymax = 8.
-initial_tot_mass = tf.constant(m0 * (xmax-xmin) * (ymax-ymin),dtype=DTYPE)
-
-l     = -((g*m0)/(1+alpha*m0))+(gamma*mu*sigma**2*np.log(np.sqrt(m0)))
-s     =  tf.constant([0, -0.6],  dtype=DTYPE, shape=(1, 2))
+l     = -((g*m0)/(1+alpha*m0))+(gamma*mu*sigma**2*np.log(np.sqrt(m0))) # 0.08
+u_b   = -mu*sigma**2*np.log(np.sqrt(m0))
+R     = 0.37
+s     =  tf.constant([0, -0.3],  dtype=DTYPE, shape=(1, 2))#tf.constant([0, -0.6],  dtype=DTYPE, shape=(1, 2)) # -0.3
+v0 = m0**((-mu*sigma**2)/2)
 
 # Constants of the agents
 Xi = np.sqrt(np.abs((mu*sigma**4)/(2*g*m0)))
 Cs = np.sqrt(np.abs((g*m0)/(2*mu)))
+
+# room limits (changed on march 2023 to be bigger)
+xmin = -4.
+xmax = 4.
+ymin = -4.
+ymax = 4.
+initial_tot_mass = tf.constant(m0 * (xmax-xmin) * (ymax-ymin),dtype=DTYPE)
+
+
 
 ########################################################################################################################
 # This is the environment initializer, used for reproducibility as well
@@ -90,6 +94,8 @@ def V(Phi,Gamma, x):
     for i in range(x.shape[0]):
         if tf.less_equal(tf.norm(x[i],'euclidean'),R): # for points in the cilinder
             U0[i] = tf.constant(V_const,dtype=DTYPE)   # we have higher cost
+        else:
+            U0[i] = tf.constant(0,dtype=DTYPE)   # we have higher cost
     U0 = tf.stack(U0)
     return g * tf.multiply(Phi,Gamma) + U0 # formula for the potential from reference paper
 
@@ -101,15 +107,14 @@ def V(Phi,Gamma, x):
 
 def sample_room(verbose):
     # number of points
-    N_b = 200
-    N_s = 4000
+    N_b = 50
+    N_s = 2000
     
     # room limits (changed on march 2023 to be bigger)
     xmin = -4.
     xmax = 4.
-    ymin = -8.
-    ymax = 8.
-
+    ymin = -4.
+    ymax = 4.
     # Lower bounds
     lb = tf.constant([xmin, ymin], dtype=DTYPE)
     # Upper bounds
@@ -124,11 +129,11 @@ def sample_room(verbose):
     #erasing points inside the cilinder 
 
     ind1 = tf.where(tf.norm(X_s, axis=1) <= R)
-    ind = tf.where(tf.norm(X_s, axis=1) > R)
+    #ind = tf.where(tf.norm(X_s, axis=1) > R)
     X_c = tf.gather(X_s, ind1)
-    X_s = tf.gather(X_s, ind)
-    N_s = X_s.shape[0]
-    X_s = tf.squeeze(X_s)
+    #X_s = tf.gather(X_s, ind)
+    #N_s = X_s.shape[0]
+    #X_s = tf.squeeze(X_s)
     X_c = tf.squeeze(X_c)
 
     # Boundary data (square - outside walls)
@@ -161,14 +166,14 @@ def init_DGM(RNN_layers, FNN_layers, nodes_per_layer, activation):
 
 def train(Phi_theta,Gamma_theta,verbose):
     # the learning rate and the optimizer are hyperparameters, we can change them to obtain better results
-    learning_rate = tf.keras.optimizers.schedules.PiecewiseConstantDecay([100, 500], [1e-1, 7e-2, 5e-2])
-    optimizer_Phi = tf.optimizers.Adam(learning_rate=learning_rate)
-    optimizer_Gamma = tf.optimizers.Adam(learning_rate=learning_rate)
+    #learning_rate = tf.keras.optimizers.schedules.PiecewiseConstantDecay([100, 500], [1e-1, 7e-2, 5e-2])
+    optimizer_Phi = tf.optimizers.Adam()
+    optimizer_Gamma = tf.optimizers.Adam()
 
 
     # Train network - we sample a new room for each sampling stage 
-    sampling_stages = 3
-    steps_per_sample = 1001
+    sampling_stages = 1
+    steps_per_sample = 2001
     hist = []
     print('round-it           loss')
     for i in range(sampling_stages):
@@ -176,12 +181,14 @@ def train(Phi_theta,Gamma_theta,verbose):
             print('-----------------------------------------------')
             # for a given sample, take the prescribed number of training steps
             for j in range(steps_per_sample):
-                loss_Phi   = train_step_Phi(Phi_theta,Gamma_theta, optimizer_Phi, X_b, X_s, X_c)
-                loss_Gamma = train_step_Gamma(Phi_theta,Gamma_theta, optimizer_Gamma, X_b, X_s, X_c)
+                loss_Phi, r_Phi, r_Gamma, m_bRoom   = train_step_Phi(Phi_theta,Gamma_theta, optimizer_Phi, X_b, X_s, X_c)
+                loss_Gamma, r_Phi, r_Gamma, m_bRoom = train_step_Gamma(Phi_theta,Gamma_theta, optimizer_Gamma, X_b, X_s, X_c)
                 hist.append(np.mean(np.array([loss_Gamma,loss_Phi])))
                 if verbose > 0:
                     if j % 50 == 0:
                         print(' {:01d}-{:04d}          {:10.4e}'.format(i+1,j,loss_Gamma))
+                        print('--- residual_Phi= ' + str(r_Phi) + ' --- residual_Gamma= '+ str(r_Gamma) + ' --- bordo= ' + str(m_bRoom))
+
     if verbose > 1: # optional plotting of the loss function
         plt.figure(figsize=(5,5))
         plt.plot(range(len(hist[50:-1])), hist[50:-1],'k-')
@@ -266,7 +273,7 @@ def residual_Gamma(points, Gamma, Gamma_x, Gamma_xx, Phi, Phi_x, Phi_xx):
     
     resFP = l*Gamma + term1  +term2 +term_pot + term_log
     
-    return tf.reduce_mean(tf.square(resFP))
+    return tf.norm(resFP)
 
 # residual of the HJB
 def residual_Phi(points, Gamma, Gamma_x, Gamma_xx, Phi, Phi_x, Phi_xx):
@@ -277,7 +284,7 @@ def residual_Phi(points, Gamma, Gamma_x, Gamma_xx, Phi, Phi_x, Phi_xx):
     
     resHJB = l*Phi + term1  +term2 +term_pot + term_log
     
-    return tf.reduce_mean(tf.square(resHJB))
+    return tf.norm(resHJB)
 ########################################################################################################################
 
 def compute_loss(Phi_theta,Gamma_theta, X_b, X_s, X_c):
@@ -285,8 +292,7 @@ def compute_loss(Phi_theta,Gamma_theta, X_b, X_s, X_c):
     r_Phi, r_Gamma = get_residuals(Phi_theta,Gamma_theta, X_s) # we compute the residuals
     
     #  we consider the weights used on the report on overleaf
-    m_boundary = tf.multiply(Gamma_theta(X_b),Phi_theta(X_b))
-    m_bRoom = (tf.reduce_mean(tf.square(m0 - m_boundary))) # boundary discrepancy
+    m_bRoom = tf.norm(tf.sqrt(m0) - Gamma_theta(X_b)) + tf.norm(tf.sqrt(m0) - Phi_theta(X_b)) # boundary discrepancy
     # Gamma_cilinder = Gamma_theta(X_r)
     # Gamma_bC = tf.reduce_mean(tf.square(Gamma_cilinder))
 
@@ -294,11 +300,10 @@ def compute_loss(Phi_theta,Gamma_theta, X_b, X_s, X_c):
     # mass constraint 
     # total mass in the initial condition
     
-    m_Cyl = tf.reduce_mean(tf.square(Gamma_theta(X_c)))+tf.reduce_mean(tf.square(Phi_theta(X_c)))
+    #m_Cyl = tf.reduce_mean(tf.square(Gamma_theta(X_c)))+tf.reduce_mean(tf.square(Phi_theta(X_c)))
     
     #mass_conservation = tf.square(current_total_mass-initial_tot_mass)
-    
-    return r_Phi + r_Gamma + m_bRoom + m_Cyl# + mass_conservation
+    return r_Phi + r_Gamma + m_bRoom, r_Phi, r_Gamma, m_bRoom #+ m_Cyl# + mass_conservation
 
 
 ########################################################################################################################
@@ -310,38 +315,118 @@ def get_grad(Phi,Gamma, X_b, X_s, X_c, target):
             # This tape is for derivatives with
             # respect to trainable variables
             tape.watch(Gamma.trainable_variables)
-            loss = compute_loss(Phi,Gamma, X_b, X_s, X_c)
+            loss, r_Phi, r_Gamma, m_bRoom = compute_loss(Phi,Gamma, X_b, X_s, X_c)
 
         g = tape.gradient(loss, Gamma.trainable_variables)
         del tape
-        return loss, g
+        return loss, g, r_Phi, r_Gamma, m_bRoom
     elif target == 'Phi':
         with tf.GradientTape(persistent=True) as tape:
             # This tape is for derivatives with
             # respect to trainable variables
             tape.watch(Phi.trainable_variables)
-            loss = compute_loss(Phi,Gamma, X_b, X_s, X_c)
+            loss, r_Phi, r_Gamma, m_bRoom = compute_loss(Phi,Gamma, X_b, X_s, X_c)
 
         g = tape.gradient(loss, Phi.trainable_variables)
         del tape
-        return loss, g
+        return loss, g, r_Phi, r_Gamma, m_bRoom
 ########################################################################################################################
 
 # Define one training step as a TensorFlow function to increase speed of training
 @tf.function
 def train_step_Phi(Phi,Gamma, optim, X_b, X_s, X_c):
     # Compute current loss and gradient w.r.t. parameters
-    loss_Phi, grad_theta_Phi = get_grad(Phi,Gamma, X_b, X_s, X_c, 'Phi')
+    loss_Phi, grad_theta_Phi, r_Phi, r_Gamma, m_bRoom = get_grad(Phi,Gamma, X_b, X_s, X_c, 'Phi')
     # Perform gradient descent step
     optim.apply_gradients(zip(grad_theta_Phi, Phi.trainable_variables))
-    return loss_Phi
+    return loss_Phi, r_Phi, r_Gamma, m_bRoom
 
 @tf.function
 def train_step_Gamma(Phi,Gamma, optim, X_b, X_s, X_c):
     # Compute current loss and gradient w.r.t. parameters
-    loss_Gamma, grad_theta_Gamma = get_grad(Phi,Gamma, X_b, X_s, X_c, 'Gamma')
+    loss_Gamma, grad_theta_Gamma, r_Phi, r_Gamma, m_bRoom = get_grad(Phi,Gamma, X_b, X_s, X_c, 'Gamma')
     # Perform gradient descent step
     optim.apply_gradients(zip(grad_theta_Gamma, Gamma.trainable_variables))
-    return loss_Gamma
+    return loss_Gamma, r_Phi, r_Gamma, m_bRoom
+
+
+#######################################################################################################################
+# WARMSTART SECTION
+
+def warmstart_loss(f, X0):
+    f_pred = f(X0)
+    loss = tf.norm(f_pred - tf.sqrt(m0))
+    return loss
+
+def grad_warmstart(f, X0):
+    with tf.GradientTape(persistent=True) as tape:
+        # This tape is for derivatives with
+        # respect to trainable variables
+        theta = f.trainable_variables
+        tape.watch(theta)
+        loss = warmstart_loss(f, X0)
+
+    g = tape.gradient(loss, theta)
+    del tape
+    return loss, g
+
+
+def train_warmstart(f, optim, X0):
+    # Compute current loss and gradient w.r.t. parameters
+    loss, grad_theta = grad_warmstart(f, X0)
+    # Perform gradient descent step
+    optim.apply_gradients(zip(grad_theta, f.trainable_variables))
+    return loss
+
+def warmstart(Phi_theta,Gamma_theta,verbose):
+
+    #learning_rate = tf.keras.optimizers.schedules.PiecewiseConstantDecay([100, 3000], [5e-1, 1e-1, 5e-3])
+    optimizer = tf.optimizers.Adam()
+
+    #  Train network
+    # for each sampling stage
+    sampling_stages = 1
+    steps_per_sample = 2001
+    
+    hist = []
+    if verbose > 0:
+        print('------ preprocessing for Gamma_theta ------')
+    # preprocessing for u
+    for i in range(sampling_stages):
+
+        # sample from the required regions
+        X_b, X_s, X_c = sample_room(0)
+        X0 = tf.concat([X_b, X_s, X_c ],0)
+        loss = warmstart_loss(Gamma_theta, X0)
+        hist.append(loss.numpy())
+
+        # for a given sample, take the required number of SGD steps
+        for j in range(steps_per_sample):
+            loss = train_warmstart(Gamma_theta, optimizer,X0)
+            if verbose > 0:
+                if j % 50 == 0:
+                    print('Gamma_theta It {:05d}: loss = {:10.8e}'.format(j, loss))
+                    
+    hist = []
+    #learning_rate = tf.keras.optimizers.schedules.PiecewiseConstantDecay([1000, 3000], [5e-1, 1e-1, 5e-2])
+    optimizer = tf.optimizers.Adam()
+    if verbose > 0:
+        print('------ preprocessing  for Phi_theta------')
+    # preprocessing for m
+    for i in range(sampling_stages):
+
+        # sample from the required regions
+        X_b, X_s, X_c = sample_room(0)
+        X0 = tf.concat([X_b, X_s, X_c ],0)
+        loss = warmstart_loss(Phi_theta, X0)
+        hist.append(loss.numpy())
+
+        # for a given sample, take the required number of training steps
+        for j in range(steps_per_sample):
+            loss = train_warmstart(Phi_theta, optimizer, X0)
+            if verbose > 0:
+                if j % 50 == 0:
+                    print('Phi_theta It {:05d}: loss = {:10.8e}'.format(j, loss))
+    return Phi_theta, Gamma_theta
 
 
