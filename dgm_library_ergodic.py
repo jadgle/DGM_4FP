@@ -11,8 +11,9 @@ import tensorflow as tf
 import numpy as np
 import random
 import os
-
+from tensorflow.python.ops.numpy_ops import np_config
 from DGM import  DGMNet
+import matplotlib
 
 ########################################################################################################################
 DTYPE = 'float32'
@@ -512,6 +513,6 @@ def warmstart_sol(Phi_theta,Gamma_theta,phi,gamma,verbose):
             loss = train_warmstart_sol(Phi_theta, phi, optimizer, X0)
             if verbose > 0:
                 if j % 50 == 0:
-                    print('Phi_theta It {:05d}: loss = {:10.8e}'.format(j, loss))
-    return Phi_theta, Gamma_theta
+                    print('Phi_theta It {:05d}: loss = {:10.8e}'.format(j, loss))        
+    return Phi_theta, Gamma_theta, X0
 
