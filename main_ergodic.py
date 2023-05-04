@@ -9,7 +9,7 @@ import tensorflow as tf
 import matplotlib
 #from dgm_library import warmstart, sample_room, init_DGM, train, env_initializing, thick_room, warmstart_room, train_room
 #from dgm_library_wTFC import env_initializing, sample_room_polar, train_TFC, warmstart_TFC
-from dgm_library_ergodic import env_initializing, init_DGM, train, warmstart
+from dgm_library_ergodic import env_initializing, init_DGM, train, warmstart_sol
 
 from DGM import * # NOQA
 import numpy as np
@@ -20,39 +20,15 @@ env_initializing()
 
 #######################################################################################################################
 DTYPE = 'float32'
-# Problem contraints
-#sigma = 0.7
-#g = -0.2 
-
-
-V = -10
-
-sigma =  0.28# 0.35 # 0.28 (grid -4,4)
-g     = -0.03#-0.005 # -0.03
-mu    = 1
-gamma = 0
-m0    = 2.5
-alpha = 0
-l     = -((g*m0)/(1+alpha*m0))+(gamma*mu*sigma**2*np.log(np.sqrt(m0))) # 0.08
-u_b   = -mu*sigma**2*np.log(np.sqrt(m0))
-R     = 0.37
-s     =  tf.constant([0, -0.3],  dtype=DTYPE, shape=(1, 2))#tf.constant([0, -0.6],  dtype=DTYPE, shape=(1, 2)) # -0.3
-v0 = m0**((-mu*sigma**2)/2)
-
-# Constants of the agents
-Xi = np.sqrt(np.abs((mu*sigma**4)/(2*g*m0)))
-Cs = np.sqrt(np.abs((g*m0)/(2*mu)))
-
-
-#######################################################################################################################
-
-
-verbose=1
-
 
 Phi_theta = init_DGM(RNN_layers = 0, FNN_layers=1, nodes_per_layer=100,activation="tanh")
 Gamma_theta = init_DGM(RNN_layers = 0, FNN_layers=1, nodes_per_layer=100,activation="tanh")
-Phi_theta,Gamma_theta = warmstart(Phi_theta,Gamma_theta,2)
+
+phi = pd.read_csv('phi.txt', header = None)
+gamma = pd.read_csv('gamma.txt', header = None)
+
+Phi_theta,Gamma_theta = warmstart_sol(Phi_theta,Gamma_theta,phi,gamma,2)
+
 Phi_theta,Gamma_theta,X_b, X_s, X_c = train(Phi_theta,Gamma_theta,2)
 ###
 X0 = pd.concat([X_b,X_s,X_c], 0)
