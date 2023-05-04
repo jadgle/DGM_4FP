@@ -475,8 +475,8 @@ def warmstart_sol(Phi_theta,Gamma_theta,phi,gamma,verbose):
     phi = phi.reshape((Nx*Ny,1))
     gamma = gamma.reshape((Nx*Ny,1))
     
-    learning_rate = tf.keras.optimizers.schedules.PiecewiseConstantDecay([100, 3000], [5e-1, 1e-1, 5e-3])
-    optimizer = tf.optimizers.Adam(learning_rate=learning_rate)
+    #learning_rate = tf.keras.optimizers.schedules.PiecewiseConstantDecay([100, 3000], [1e-1, 5e-2, 1e-2])
+    optimizer = tf.optimizers.Adam()
 
     #  Train network
     # for each sampling stage
