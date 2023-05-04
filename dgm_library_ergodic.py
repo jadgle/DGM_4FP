@@ -481,7 +481,7 @@ def warmstart_sol(Phi_theta,Gamma_theta,phi,gamma,verbose):
     #  Train network
     # for each sampling stage
     sampling_stages = 1
-    steps_per_sample = 2001
+    steps_per_sample = 5001
     
     hist = []
     if verbose > 0:
@@ -495,7 +495,7 @@ def warmstart_sol(Phi_theta,Gamma_theta,phi,gamma,verbose):
         for j in range(steps_per_sample):
             loss = train_warmstart_sol(Gamma_theta, gamma, optimizer,X0)
             if verbose > 0:
-                if j % 50 == 0:
+                if j % 100 == 0:
                     print('Gamma_theta It {:05d}: loss = {:10.8e}'.format(j, loss))
                     
     hist = []
@@ -512,7 +512,7 @@ def warmstart_sol(Phi_theta,Gamma_theta,phi,gamma,verbose):
         for j in range(steps_per_sample):
             loss = train_warmstart_sol(Phi_theta, phi, optimizer, X0)
             if verbose > 0:
-                if j % 50 == 0:
+                if j % 100 == 0:
                     print('Phi_theta It {:05d}: loss = {:10.8e}'.format(j, loss))        
     return Phi_theta, Gamma_theta, X0
 
