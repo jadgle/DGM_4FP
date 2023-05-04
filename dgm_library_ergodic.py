@@ -468,15 +468,15 @@ def warmstart_sol(Phi_theta,Gamma_theta,phi,gamma,verbose):
     x = np.linspace(-Lx,Lx,Nx)
     y = np.linspace(-Ly,Ly,Ny)
     X,Y = np.meshgrid(x,y)
-    x = X.reshape((Lx*Ly,1))
-    y = Y.reshape((Lx*Ly,1))
+    x = X.reshape((Nx*Ny,1))
+    y = Y.reshape((Nx*Ny,1))
     X0 = pd.DataFrame(np.concatenate([x,y],1))    
     X0 = X0.astype(dtype = DTYPE)
-    phi = phi.reshape((Lx*Ly,1))
-    gamma = gamma.reshape((Lx*Ly,1))
+    phi = phi.reshape((Nx*Ny,1))
+    gamma = gamma.reshape((Nx*Ny,1))
     
-    #learning_rate = tf.keras.optimizers.schedules.PiecewiseConstantDecay([100, 3000], [5e-1, 1e-1, 5e-3])
-    optimizer = tf.optimizers.Adam()
+    learning_rate = tf.keras.optimizers.schedules.PiecewiseConstantDecay([100, 3000], [5e-1, 1e-1, 5e-3])
+    optimizer = tf.optimizers.Adam(learning_rate=learning_rate)
 
     #  Train network
     # for each sampling stage
@@ -488,7 +488,7 @@ def warmstart_sol(Phi_theta,Gamma_theta,phi,gamma,verbose):
         print('------ preprocessing for Gamma_theta ------')
     # preprocessing for u
     for i in range(sampling_stages):
-        loss = warmstart_loss_sol(Gamma_theta, X0)
+        loss = warmstart_loss_sol(Gamma_theta, gamma, X0)
         hist.append(loss.numpy())
 
         # for a given sample, take the required number of SGD steps
@@ -505,7 +505,7 @@ def warmstart_sol(Phi_theta,Gamma_theta,phi,gamma,verbose):
         print('------ preprocessing  for Phi_theta------')
     # preprocessing for m
     for i in range(sampling_stages):
-        loss = warmstart_loss_sol(Phi_theta, X0)
+        loss = warmstart_loss_sol(Phi_theta, phi, X0)
         hist.append(loss.numpy())
 
         # for a given sample, take the required number of training steps
