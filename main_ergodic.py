@@ -21,17 +21,14 @@ env_initializing()
 #######################################################################################################################
 DTYPE = 'float32'
 
-Phi_theta = init_DGM(RNN_layers = 0, FNN_layers=1, nodes_per_layer=100,activation="tanh")
-Gamma_theta = init_DGM(RNN_layers = 0, FNN_layers=1, nodes_per_layer=100,activation="tanh")
+Phi_theta = init_DGM(RNN_layers = 1, FNN_layers=1, nodes_per_layer=10,activation="tanh")
+Gamma_theta = init_DGM(RNN_layers = 1, FNN_layers=1, nodes_per_layer=10,activation="tanh")
 
-phi = pd.read_csv('phi.txt', header = None)
-gamma = pd.read_csv('gamma.txt', header = None)
+phi = np.genfromtxt('phi.txt')
+gamma = np.genfromtxt('gamma.txt')
 
 Phi_theta,Gamma_theta, X0  = warmstart_sol(Phi_theta,Gamma_theta,phi,gamma,2)
 
-
-
-np_config.enable_numpy_behavior()
 Phi = Phi_theta(X0)
 Gamma = Gamma_theta(X0)
 m = Phi*Gamma
