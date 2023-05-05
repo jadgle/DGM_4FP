@@ -21,8 +21,8 @@ DTYPE = 'float32'
 # Problem parameters
 V_const = -10e2
 
-sigma =  0.35# 0.35 # 0.28 (grid -4,4)
-g     = -0.005#-0.005 # -0.03
+sigma =  0.28# 0.35 # 0.28 (grid -4,4)
+g     = -0.03#-0.005 # -0.03
 mu    = 1
 gamma = 0
 m0    = 2.5
@@ -30,7 +30,7 @@ alpha = 0
 l     = -((g*m0)/(1+alpha*m0))+(gamma*mu*sigma**2*np.log(np.sqrt(m0))) # 0.08
 u_b   = -mu*sigma**2*np.log(np.sqrt(m0))
 R     = 0.37
-s     =  tf.constant([0, -0.6],  dtype=DTYPE, shape=(1, 2))#tf.constant([0, -0.3],  dtype=DTYPE, shape=(1, 2)) # -0.3
+s     =  tf.constant([0, -0.3],  dtype=DTYPE, shape=(1, 2))#tf.constant([0, -0.3],  dtype=DTYPE, shape=(1, 2)) # -0.3
 v0 = m0**((-mu*sigma**2)/2)
 
 # Constants of the agents
@@ -221,10 +221,8 @@ def get_derivatives(f_theta, x): # function that computes the derivatives using 
     for df_dxi, xi in zip(df_unstacked, x_unstacked):
         # Take 2nd derivative of each dimension separately and sum for the laplacian
         laplacian_f.append(tape1.gradient(df_dxi, xi))  # d/dx_i (df/dx_i)
-    
-    print(laplacian_f)
+
     laplacian_f = sum(laplacian_f)
-    print(laplacian_f)
     return grad_f, laplacian_f
 
 # def get_derivatives(f_theta, x): # function that computes the derivatives using automatic differentiation
