@@ -188,7 +188,7 @@ def train(Phi_theta,Gamma_theta,verbose):
                 if verbose > 0:
                     if j % 50 == 0:
                         print(' {:01d}-{:04d}          {:10.4e}'.format(i+1,j,loss_Gamma))
-                        print('--- residual_Phi= ' + str(r_Phi.eval()) + ' --- residual_Gamma= '+ str(r_Gamma.eval()) + ' --- bordo= ' + str(m_bRoom.eval()))
+                        print('--- residual_Phi= ' + str(r_Phi.numpy()) + ' --- residual_Gamma= '+ str(r_Gamma.numpy()) + ' --- bordo= ' + str(m_bRoom.numpy()))
 
     if verbose > 1: # optional plotting of the loss function
         plt.figure(figsize=(5,5))
@@ -200,30 +200,46 @@ def train(Phi_theta,Gamma_theta,verbose):
 
 
 ########################################################################################################################
+# def get_derivatives(f_theta, x): # function that computes the derivatives using automatic differentiation
+#     with tf.GradientTape(persistent=True) as tape1:
+#         x_unstacked = tf.unstack(x, axis=1)
+#         tape1.watch(x_unstacked)
+
+#         # Using nested GradientTape for calculating higher order derivatives
+#         with tf.GradientTape() as tape2:
+#             # Re-stack x before passing it into f
+#             x_stacked = tf.stack(x_unstacked, axis=1)  # shape = (k,n)
+#             tape2.watch(x_stacked)
+#             f = f_theta(x_stacked)
+
+#         # Calculate gradient of m_theta with respect to x
+#         grad_f = tape2.batch_jacobian(f, x_stacked)  # shape = (k,n)
+
+#         # Turn df/dx into a list of n tensors of shape (k,)
+#         df_unstacked = tf.unstack(grad_f, axis=1)
+
+#     laplacian_f = []
+#     for df_dxi, xi in zip(df_unstacked, x_unstacked):
+#         # Take 2nd derivative of each dimension separately and sum for the laplacian
+#         laplacian_f.append(tape1.gradient(df_dxi, xi))  # d/dx_i (df/dx_i)
+#     laplacian_f = sum(laplacian_f)
+#     return grad_f, laplacian_f
+
 def get_derivatives(f_theta, x): # function that computes the derivatives using automatic differentiation
     with tf.GradientTape(persistent=True) as tape1:
-        x_unstacked = tf.unstack(x, axis=1)
-        tape1.watch(x_unstacked)
-
+        tape1.watch(x)
         # Using nested GradientTape for calculating higher order derivatives
         with tf.GradientTape() as tape2:
-            # Re-stack x before passing it into f
-            x_stacked = tf.stack(x_unstacked, axis=1)  # shape = (k,n)
-            tape2.watch(x_stacked)
-            f = f_theta(x_stacked)
+            tape2.watch(x)
+            f = f_theta(x)
 
         # Calculate gradient of m_theta with respect to x
-        grad_f = tape2.batch_jacobian(f, x_stacked)  # shape = (k,n)
-
-        # Turn df/dx into a list of n tensors of shape (k,)
-        df_unstacked = tf.unstack(grad_f, axis=1)
-
-    laplacian_f = []
-    for df_dxi, xi in zip(df_unstacked, x_unstacked):
-        # Take 2nd derivative of each dimension separately and sum for the laplacian
-        laplacian_f.append(tape1.gradient(df_dxi, xi))  # d/dx_i (df/dx_i)
-    laplacian_f = sum(laplacian_f)
-    return grad_f, laplacian_f
+        grad_f = tape2.batch_jacobian(f, x)  # shape = (k,n)
+    hessian = tape1.batch_jacobian(grad_f, x)
+    laplacian = []
+    for i in range(x.shape[0]):
+        laplacian.append(tf.linalg.trace(hessian[i,:,:,:]))
+    return grad_f, tf.Variable(laplacian,dtype=DTYPE)
 
 
 # function to evaluate the residuals of the PDEs 
@@ -233,7 +249,7 @@ def get_residuals(Phi_theta,Gamma_theta, x):
     
     grad_Phi, laplacian_Phi = get_derivatives(Phi_theta, x)
     grad_Gamma, laplacian_Gamma = get_derivatives(Gamma_theta, x)
-    
+    print(laplacian_Phi)
     #print(grad_Phi.shape)
     #print(laplacian_Phi.shape)
     
