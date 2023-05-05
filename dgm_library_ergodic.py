@@ -81,27 +81,13 @@ def env_initializing():
 
 ########################################################################################################################
 # Potential V entering the HJB equation. The value V_const is a parameter defined above
-# def V(Phi,Gamma, x):
-#     U0 = np.zeros(shape = (x.shape[0],1))
-#     for i in range(x.shape[0]):
-#         if tf.less_equal(tf.norm(x[i],'euclidean'),R): # for points in the cilinder
-#             U0[i] = V_const   # we have higher cost
-#     U0 = tf.convert_to_tensor(U0, dtype=DTYPE)
-#     return g * tf.multiply(Phi,Gamma) + U0 # formula for the potential from reference paper
-
 def V(Phi,Gamma, x):
-    U0 = tf.zeros(shape = (x.shape[0],1),dtype=DTYPE)
-    U0 = tf.unstack(U0)
+    U0 = np.zeros(shape = (x.shape[0],1))
     for i in range(x.shape[0]):
         if tf.less_equal(tf.norm(x[i],'euclidean'),R): # for points in the cilinder
-            U0[i] = tf.constant(V_const,dtype=DTYPE)   # we have higher cost
-        else:
-            U0[i] = tf.constant(0,dtype=DTYPE)   # we have higher cost
-    U0 = tf.stack(U0)
+            U0[i] = V_const   # we have higher cost
+    U0 = tf.convert_to_tensor(U0, dtype=DTYPE)
     return g * tf.multiply(Phi,Gamma) + U0 # formula for the potential from reference paper
-
-
-
 
 
 ########################################################################################################################
@@ -269,6 +255,7 @@ def residual_Gamma(points, Gamma, Gamma_x, Gamma_xx, Phi, Phi_x, Phi_xx):
 
 # residual of the HJB
 def residual_Phi(points, Gamma, Gamma_x, Gamma_xx, Phi, Phi_x, Phi_xx):
+    print('Type of phi',Phi)
     term1 = -mu*sigma**2*tf.reduce_sum(tf.multiply(s, Phi_x),1) 
     term2 = ((mu*sigma**4)/2)*Phi_xx 
     term_pot = tf.multiply(V(Gamma,Phi,points),Phi)
@@ -279,12 +266,14 @@ def residual_Phi(points, Gamma, Gamma_x, Gamma_xx, Phi, Phi_x, Phi_xx):
     return tf.norm(resHJB)
 ########################################################################################################################
 
-def compute_loss(Phi_theta,Gamma_theta, X_b, X_s, X_c):
+def compute_loss(Phi_theta,Gamma_theta, X_s):
+    
+    
     
     r_Phi, r_Gamma = get_residuals(Phi_theta,Gamma_theta, X_s) # we compute the residuals
     
     #  we consider the weights used on the report on overleaf
-    m_bRoom = tf.norm(tf.sqrt(m0) - Gamma_theta(X_b)) + tf.norm(tf.sqrt(m0) - Phi_theta(X_b)) # boundary discrepancy
+    #m_bRoom = tf.norm(tf.sqrt(m0) - Gamma_theta(X_b)) + tf.norm(tf.sqrt(m0) - Phi_theta(X_b)) # boundary discrepancy
     # Gamma_cilinder = Gamma_theta(X_r)
     # Gamma_bC = tf.reduce_mean(tf.square(Gamma_cilinder))
 
@@ -292,10 +281,10 @@ def compute_loss(Phi_theta,Gamma_theta, X_b, X_s, X_c):
     # mass constraint 
     # total mass in the initial condition
     
-    m_Cyl = tf.norm(Gamma_theta(X_c))+tf.norm(Phi_theta(X_c))
+    #m_Cyl = tf.norm(Gamma_theta(X_c))+tf.norm(Phi_theta(X_c))
     
     #mass_conservation = tf.square(current_total_mass-initial_tot_mass)
-    return r_Phi + r_Gamma + m_bRoom, r_Phi, r_Gamma, m_bRoom + m_Cyl# + mass_conservation
+    return r_Phi, r_Gamma 
 
 
 ########################################################################################################################
