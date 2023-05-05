@@ -322,7 +322,7 @@ def get_grad(Phi,Gamma, X_b, X_s, X_c, target):
             # This tape is for derivatives with
             # respect to trainable variables
             tape.watch(Gamma.trainable_variables)
-            loss, r_Phi, r_Gamma, m_bRoom = compute_loss(Phi,Gamma, X_b, X_s, X_c)
+            loss, r_Phi, r_Gamma, m_bRoom, m_Cyl = compute_loss(Phi,Gamma, X_b, X_s, X_c)
 
         g = tape.gradient(loss, Gamma.trainable_variables)
         del tape
