@@ -9,7 +9,7 @@ import tensorflow as tf
 import matplotlib
 #from dgm_library import warmstart, sample_room, init_DGM, train, env_initializing, thick_room, warmstart_room, train_room
 #from dgm_library_wTFC import env_initializing, sample_room_polar, train_TFC, warmstart_TFC
-from dgm_library_ergodic import env_initializing, init_DGM, train, warmstart_sol
+from dgm_library_ergodic import env_initializing, init_DGM, train, warmstart_sol, compute_loss, get_derivatives, sample_room
 
 from DGM import * # NOQA
 import numpy as np
@@ -21,35 +21,55 @@ env_initializing()
 #######################################################################################################################
 DTYPE = 'float32'
 
-Phi_theta = init_DGM(RNN_layers = 0, FNN_layers=1, nodes_per_layer=100,activation="tanh")
-Gamma_theta = init_DGM(RNN_layers = 0, FNN_layers=1, nodes_per_layer=100,activation="tanh")
+Phi_theta = init_DGM(RNN_layers = 0, FNN_layers=1, nodes_per_layer=10,activation="tanh")
+Gamma_theta = init_DGM(RNN_layers = 0, FNN_layers=1, nodes_per_layer=10,activation="tanh")
 
 phi = np.genfromtxt('phi.txt')
 gamma = np.genfromtxt('gamma.txt')
 
-Phi_theta,Gamma_theta, X0  = warmstart_sol(Phi_theta,Gamma_theta,phi,gamma,2)
 
-Phi = Phi_theta(X0)
-Gamma = Gamma_theta(X0)
-m = Phi*Gamma
-x = X0.iloc[:,0]
-y = X0.iloc[:,1]
+Nx = 150
+Ny = 150
+Lx = 6
+Ly = 6
+#Define grid 
+x = np.linspace(-Lx,Lx,Nx)
+y = np.linspace(-Ly,Ly,Ny)
+X,Y = np.meshgrid(x,y)
+x = X.reshape((Nx*Ny,1))
+y = Y.reshape((Nx*Ny,1))
+X0 = pd.DataFrame(np.concatenate([x,y],1))    
+X0 = tf.Variable(X0,dtype = DTYPE)
 
-usual = matplotlib.cm.hot_r(np.arange(256))
-saturate = np.ones((int(256 / 20), 4))
-for i in range(3):
-    saturate[:, i] = np.linspace(usual[-1, i], 0, saturate.shape[0])
-cmap1 = np.vstack((usual, saturate))
-cmap1 = matplotlib.colors.ListedColormap(cmap1, name='myColorMap', N=cmap1.shape[0])
+X_b, X_s, X_c = sample_room(0)
+X0 = tf.concat([X_b, X_s, X_c ],0)
 
-fig = plt.figure(figsize=(7,6))
-plt.scatter(x, y, c=m, cmap=cmap1, marker='.', alpha=0.3)
-plt.xlabel('$x$')
-plt.ylabel('$y$')
-plt.colorbar()
-plt.show()
+grad_f, laplacian_f = get_derivatives(Phi_theta, X0)
 
-Phi_theta,Gamma_theta,X_b, X_s, X_c = train(Phi_theta,Gamma_theta,2)
+print(laplacian_f.numpy())
+#Phi_theta,Gamma_theta, X0  = warmstart_sol(Phi_theta,Gamma_theta,phi,gamma,2)
+
+# Phi = Phi_theta(X0)
+# Gamma = Gamma_theta(X0)
+# m = Phi*Gamma
+# x = X0.iloc[:,0]
+# y = X0.iloc[:,1]
+
+# usual = matplotlib.cm.hot_r(np.arange(256))
+# saturate = np.ones((int(256 / 20), 4))
+# for i in range(3):
+#     saturate[:, i] = np.linspace(usual[-1, i], 0, saturate.shape[0])
+# cmap1 = np.vstack((usual, saturate))
+# cmap1 = matplotlib.colors.ListedColormap(cmap1, name='myColorMap', N=cmap1.shape[0])
+
+# fig = plt.figure(figsize=(7,6))
+# plt.scatter(x, y, c=m, cmap=cmap1, marker='.', alpha=0.3)
+# plt.xlabel('$x$')
+# plt.ylabel('$y$')
+# plt.colorbar()
+# plt.show()
+
+#Phi_theta,Gamma_theta,X_b, X_s, X_c = train(Phi_theta,Gamma_theta,2)
 ###
 # X0 = pd.concat([X_b,X_s,X_c], 0)
 # x = X0.iloc[:,0]
