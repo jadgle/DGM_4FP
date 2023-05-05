@@ -81,24 +81,24 @@ def env_initializing():
 
 ########################################################################################################################
 # Potential V entering the HJB equation. The value V_const is a parameter defined above
-# def V(Phi,Gamma, x):
-#     U0 = np.zeros(shape = (x.shape[0],1))
-#     for i in range(x.shape[0]):
-#         if tf.less_equal(tf.norm(x[i],'euclidean'),R): # for points in the cilinder
-#             U0[i] = V_const   # we have higher cost
-#     U0 = tf.convert_to_tensor(U0, dtype=DTYPE)
-#     return g * tf.multiply(Phi,Gamma) + U0 # formula for the potential from reference paper
-
 def V(Phi,Gamma, x):
-    U0 = tf.zeros(shape = (x.shape[0],1),dtype=DTYPE)
-    U0 = tf.unstack(U0)
+    U0 = np.zeros(shape = (x.shape[0],1))
     for i in range(x.shape[0]):
         if tf.less_equal(tf.norm(x[i],'euclidean'),R): # for points in the cilinder
-            U0[i] = tf.constant(V_const,dtype=DTYPE)   # we have higher cost
-        else:
-            U0[i] = tf.constant(0,dtype=DTYPE)   # we have higher cost
-    U0 = tf.stack(U0)
+            U0[i] = V_const   # we have higher cost
+    U0 = tf.convert_to_tensor(U0, dtype=DTYPE)
     return g * tf.multiply(Phi,Gamma) + U0 # formula for the potential from reference paper
+
+# def V(Phi,Gamma, x):
+#     U0 = tf.zeros(shape = (x.shape[0],1),dtype=DTYPE)
+#     U0 = tf.unstack(U0)
+#     for i in range(x.shape[0]):
+#         if tf.less_equal(tf.norm(x[i],'euclidean'),R): # for points in the cilinder
+#             U0[i] = tf.constant(V_const,dtype=DTYPE)   # we have higher cost
+#         else:
+#             U0[i] = tf.constant(0,dtype=DTYPE)   # we have higher cost
+#     U0 = tf.stack(U0)
+#     return g * tf.multiply(Phi,Gamma) + U0 # formula for the potential from reference paper
 
 
 
@@ -200,46 +200,46 @@ def train(Phi_theta,Gamma_theta,verbose):
 
 
 ########################################################################################################################
-# def get_derivatives(f_theta, x): # function that computes the derivatives using automatic differentiation
-#     with tf.GradientTape(persistent=True) as tape1:
-#         x_unstacked = tf.unstack(x, axis=1)
-#         tape1.watch(x_unstacked)
-
-#         # Using nested GradientTape for calculating higher order derivatives
-#         with tf.GradientTape() as tape2:
-#             # Re-stack x before passing it into f
-#             x_stacked = tf.stack(x_unstacked, axis=1)  # shape = (k,n)
-#             tape2.watch(x_stacked)
-#             f = f_theta(x_stacked)
-
-#         # Calculate gradient of m_theta with respect to x
-#         grad_f = tape2.batch_jacobian(f, x_stacked)  # shape = (k,n)
-
-#         # Turn df/dx into a list of n tensors of shape (k,)
-#         df_unstacked = tf.unstack(grad_f, axis=1)
-
-#     laplacian_f = []
-#     for df_dxi, xi in zip(df_unstacked, x_unstacked):
-#         # Take 2nd derivative of each dimension separately and sum for the laplacian
-#         laplacian_f.append(tape1.gradient(df_dxi, xi))  # d/dx_i (df/dx_i)
-#     laplacian_f = sum(laplacian_f)
-#     return grad_f, laplacian_f
-
 def get_derivatives(f_theta, x): # function that computes the derivatives using automatic differentiation
     with tf.GradientTape(persistent=True) as tape1:
-        tape1.watch(x)
+        x_unstacked = tf.unstack(x, axis=1)
+        tape1.watch(x_unstacked)
+
         # Using nested GradientTape for calculating higher order derivatives
         with tf.GradientTape() as tape2:
-            tape2.watch(x)
-            f = f_theta(x)
+            # Re-stack x before passing it into f
+            x_stacked = tf.stack(x_unstacked, axis=1)  # shape = (k,n)
+            tape2.watch(x_stacked)
+            f = f_theta(x_stacked)
 
         # Calculate gradient of m_theta with respect to x
-        grad_f = tape2.batch_jacobian(f, x)  # shape = (k,n)
-    hessian = tape1.batch_jacobian(grad_f, x)
-    laplacian = []
-    for i in range(x.shape[0]):
-        laplacian.append(tf.linalg.trace(hessian[i,:,:,:]))
-    return grad_f, tf.Variable(laplacian,dtype=DTYPE)
+        grad_f = tape2.batch_jacobian(f, x_stacked)  # shape = (k,n)
+
+        # Turn df/dx into a list of n tensors of shape (k,)
+        df_unstacked = tf.unstack(grad_f, axis=1)
+
+    laplacian_f = []
+    for df_dxi, xi in zip(df_unstacked, x_unstacked):
+        # Take 2nd derivative of each dimension separately and sum for the laplacian
+        laplacian_f.append(tape1.gradient(df_dxi, xi))  # d/dx_i (df/dx_i)
+    laplacian_f = sum(laplacian_f)
+    return grad_f, laplacian_f
+
+# def get_derivatives(f_theta, x): # function that computes the derivatives using automatic differentiation
+#     with tf.GradientTape(persistent=True) as tape1:
+#         tape1.watch(x)
+#         # Using nested GradientTape for calculating higher order derivatives
+#         with tf.GradientTape() as tape2:
+#             tape2.watch(x)
+#             f = f_theta(x)
+
+#         # Calculate gradient of m_theta with respect to x
+#         grad_f = tape2.batch_jacobian(f, x)  # shape = (k,n)
+#     hessian = tape1.batch_jacobian(grad_f, x)
+#     laplacian = []
+#     for i in range(x.shape[0]):
+#         laplacian.append(tf.linalg.trace(hessian[i,0,:,:]))
+#     return grad_f, tf.Variable(laplacian,dtype=DTYPE)
 
 
 # function to evaluate the residuals of the PDEs 
@@ -249,7 +249,6 @@ def get_residuals(Phi_theta,Gamma_theta, x):
     
     grad_Phi, laplacian_Phi = get_derivatives(Phi_theta, x)
     grad_Gamma, laplacian_Gamma = get_derivatives(Gamma_theta, x)
-    print(laplacian_Phi)
     #print(grad_Phi.shape)
     #print(laplacian_Phi.shape)
     
@@ -469,8 +468,8 @@ def train_warmstart_sol(f, f_true, optim, X0):
 def warmstart_sol(Phi_theta,Gamma_theta,phi,gamma,verbose):
     Nx = 150
     Ny = 150
-    Lx = 6
-    Ly = 6
+    Lx = 2
+    Ly = 2
     #Define grid 
     x = np.linspace(-Lx,Lx,Nx)
     y = np.linspace(-Ly,Ly,Ny)
@@ -488,7 +487,7 @@ def warmstart_sol(Phi_theta,Gamma_theta,phi,gamma,verbose):
     #  Train network
     # for each sampling stage
     sampling_stages = 1
-    steps_per_sample = 5001
+    steps_per_sample = 2001
     
     hist = []
     if verbose > 0:
