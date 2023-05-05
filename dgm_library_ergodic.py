@@ -258,33 +258,33 @@ def get_residuals(Phi_theta,Gamma_theta, x):
 
 # residual of the Fokker Plank
 def residual_Gamma(points, Gamma, Gamma_x, Gamma_xx, Phi, Phi_x, Phi_xx):
-    term1 = mu*sigma**2*tf.reduce_sum(tf.multiply(s, Gamma_x),1) 
-    term2 = ((mu*sigma**4)/2)*Gamma_xx 
+    term1 = tf.math.scalar_mul(mu*sigma**2,tf.reduce_sum(tf.multiply(s, Gamma_x),1))
+    term2 = tf.math.scalar_mul(((mu*sigma**4)/2),Gamma_xx)
     term_pot = tf.multiply(V(Gamma,Phi,points),Gamma)
     term_log = 0#gamma*mu*sigma**2*tf.multiply(Gamma,tf.math.log(Phi))
     
-    resFP = l*Gamma + term1  +term2 +term_pot + term_log
+    resFP = tf.math.scalar_mul(l,Gamma) + term1  +term2 +term_pot + term_log
     #print('calcolo residuo Gamma')
     return tf.norm(resFP)
 
 # residual of the HJB
 def residual_Phi(points, Gamma, Gamma_x, Gamma_xx, Phi, Phi_x, Phi_xx):
-    term1 = -mu*sigma**2*tf.reduce_sum(tf.multiply(s, Phi_x),1) 
-    term2 = ((mu*sigma**4)/2)*Phi_xx 
+    term1 = -tf.math.scalar_mul(mu*sigma**2,tf.reduce_sum(tf.multiply(s, Phi_x),1))
+    term2 = tf.math.scalar_mul(((mu*sigma**4)/2),Phi_xx)
     term_pot = tf.multiply(V(Gamma,Phi,points),Phi)
     term_log = 0#-gamma*mu*sigma**2*tf.multiply(Phi,tf.math.log(Phi))
     
-    resHJB = l*Phi + term1  +term2 +term_pot + term_log
+    resHJB = tf.math.scalar_mul(l,Phi) + term1  +term2 +term_pot + term_log
     #print('calcolo residuo Phi')
     return tf.norm(resHJB)
 ########################################################################################################################
 
-def compute_loss(Phi_theta,Gamma_theta, X_b, X_s, X_c):
+def compute_loss(Phi_theta,Gamma_theta, X_s):
     
     r_Phi, r_Gamma = get_residuals(Phi_theta,Gamma_theta, X_s) # we compute the residuals
     
     #  we consider the weights used on the report on overleaf
-    m_bRoom = tf.norm(tf.sqrt(m0) - Gamma_theta(X_b)) + tf.norm(tf.sqrt(m0) - Phi_theta(X_b)) # boundary discrepancy
+    #m_bRoom = tf.norm(tf.sqrt(m0) - Gamma_theta(X_b)) + tf.norm(tf.sqrt(m0) - Phi_theta(X_b)) # boundary discrepancy
     # Gamma_cilinder = Gamma_theta(X_r)
     # Gamma_bC = tf.reduce_mean(tf.square(Gamma_cilinder))
 
@@ -292,10 +292,10 @@ def compute_loss(Phi_theta,Gamma_theta, X_b, X_s, X_c):
     # mass constraint 
     # total mass in the initial condition
     
-    m_Cyl = tf.norm(Gamma_theta(X_c))+tf.norm(Phi_theta(X_c))
+    #m_Cyl = tf.norm(Gamma_theta(X_c))+tf.norm(Phi_theta(X_c))
     
     #mass_conservation = tf.square(current_total_mass-initial_tot_mass)
-    return r_Phi + r_Gamma + m_bRoom, r_Phi, r_Gamma, m_bRoom + m_Cyl# + mass_conservation
+    return r_Phi, r_Gamma #r_Phi + r_Gamma + m_bRoom, r_Phi, r_Gamma, m_bRoom + m_Cyl# + mass_conservation
 
 
 ########################################################################################################################
