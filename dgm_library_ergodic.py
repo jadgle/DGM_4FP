@@ -20,22 +20,22 @@ DTYPE = 'float32'
 
 # Problem parameters
 V_const = -10e2
+# Constants of the agents
+Xi = 0.2
+Cs = 0.2
 
-sigma =  0.28# 0.35 # 0.28 (grid -4,4)
-g     = -0.03#-0.005 # -0.03
 mu    = 1
 gamma = 0
 m0    = 2.5
 alpha = 0
+g = -(2*Xi**2)/m0
+sigma = np.sqrt(2*Xi*Cs)
 l     = -((g*m0)/(1+alpha*m0))+(gamma*mu*sigma**2*np.log(np.sqrt(m0))) # 0.08
 u_b   = -mu*sigma**2*np.log(np.sqrt(m0))
 R     = 0.37
 s     =  tf.constant([0, -0.3],  dtype=DTYPE, shape=(1, 2))#tf.constant([0, -0.3],  dtype=DTYPE, shape=(1, 2)) # -0.3
 v0 = m0**((-mu*sigma**2)/2)
 
-# Constants of the agents
-Xi = np.sqrt(np.abs((mu*sigma**4)/(2*g*m0)))
-Cs = np.sqrt(np.abs((g*m0)/(2*mu)))
 
 # room limits (changed on march 2023 to be bigger)
 xmin = -2.
