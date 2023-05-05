@@ -216,13 +216,15 @@ def get_derivatives(f_theta, x): # function that computes the derivatives using 
         grad_f = tape2.batch_jacobian(f, x_stacked)  # shape = (k,n)
 
         # Turn df/dx into a list of n tensors of shape (k,)
-        df_unstacked = tf.unstack(grad_f, axis=1)
-
+        df_unstacked = tf.unstack(grad_f, axis=2)
     laplacian_f = []
     for df_dxi, xi in zip(df_unstacked, x_unstacked):
         # Take 2nd derivative of each dimension separately and sum for the laplacian
         laplacian_f.append(tape1.gradient(df_dxi, xi))  # d/dx_i (df/dx_i)
+    
+    print(laplacian_f)
     laplacian_f = sum(laplacian_f)
+    print(laplacian_f)
     return grad_f, laplacian_f
 
 # def get_derivatives(f_theta, x): # function that computes the derivatives using automatic differentiation
