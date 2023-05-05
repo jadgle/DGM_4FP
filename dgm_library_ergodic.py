@@ -21,8 +21,8 @@ DTYPE = 'float32'
 # Problem parameters
 V_const = -10e2
 
-sigma =  0.28# 0.35 # 0.28 (grid -4,4)
-g     = -0.03#-0.005 # -0.03
+sigma =  0.35# 0.35 # 0.28 (grid -4,4)
+g     = -0.005#-0.005 # -0.03
 mu    = 1
 gamma = 0
 m0    = 2.5
@@ -30,7 +30,7 @@ alpha = 0
 l     = -((g*m0)/(1+alpha*m0))+(gamma*mu*sigma**2*np.log(np.sqrt(m0))) # 0.08
 u_b   = -mu*sigma**2*np.log(np.sqrt(m0))
 R     = 0.37
-s     =  tf.constant([0, -0.3],  dtype=DTYPE, shape=(1, 2))#tf.constant([0, -0.3],  dtype=DTYPE, shape=(1, 2)) # -0.3
+s     =  tf.constant([0, -0.6],  dtype=DTYPE, shape=(1, 2))#tf.constant([0, -0.3],  dtype=DTYPE, shape=(1, 2)) # -0.3
 v0 = m0**((-mu*sigma**2)/2)
 
 # Constants of the agents
@@ -188,7 +188,7 @@ def train(Phi_theta,Gamma_theta,verbose):
                 if verbose > 0:
                     if j % 50 == 0:
                         print(' {:01d}-{:04d}          {:10.4e}'.format(i+1,j,loss_Gamma))
-                        print('--- residual_Phi= ' + str(r_Phi) + ' --- residual_Gamma= '+ str(r_Gamma) + ' --- bordo= ' + str(m_bRoom))
+                        print('--- residual_Phi= ' + str(r_Phi.eval()) + ' --- residual_Gamma= '+ str(r_Gamma.eval()) + ' --- bordo= ' + str(m_bRoom.eval()))
 
     if verbose > 1: # optional plotting of the loss function
         plt.figure(figsize=(5,5))
@@ -200,10 +200,7 @@ def train(Phi_theta,Gamma_theta,verbose):
 
 
 ########################################################################################################################
-# function that computes the derivatives using automatic differentiation
-# and uses them to evaluate the residuals of the FP and HJB eqs
-def get_residuals(u_theta,m_theta, X_s):
-    x = X_s
+def get_derivatives(f_theta, x): # function that computes the derivatives using automatic differentiation
     with tf.GradientTape(persistent=True) as tape1:
         x_unstacked = tf.unstack(x, axis=1)
         tape1.watch(x_unstacked)
@@ -213,53 +210,47 @@ def get_residuals(u_theta,m_theta, X_s):
             # Re-stack x before passing it into f
             x_stacked = tf.stack(x_unstacked, axis=1)  # shape = (k,n)
             tape2.watch(x_stacked)
-            m = m_theta(x_stacked)
+            f = f_theta(x_stacked)
 
         # Calculate gradient of m_theta with respect to x
-        dm = tape2.batch_jacobian(m, x_stacked)  # shape = (k,n)
+        grad_f = tape2.batch_jacobian(f, x_stacked)  # shape = (k,n)
 
         # Turn df/dx into a list of n tensors of shape (k,)
-        dm_unstacked = tf.unstack(dm, axis=1)
+        df_unstacked = tf.unstack(grad_f, axis=1)
 
-    laplacian_m = tf.zeros(shape=(x.shape[0],), dtype=DTYPE)
-    for df_dxi, xi in zip(dm_unstacked, x_unstacked):
+    laplacian_f = []
+    for df_dxi, xi in zip(df_unstacked, x_unstacked):
         # Take 2nd derivative of each dimension separately and sum for the laplacian
-        laplacian_m = tf.math.add(tape1.gradient(df_dxi, xi), laplacian_m)  # d/dx_i (df/dx_i)
+        laplacian_f.append(tape1.gradient(df_dxi, xi))  # d/dx_i (df/dx_i)
+    laplacian_f = sum(laplacian_f)
+    return grad_f, laplacian_f
 
-    with tf.GradientTape(persistent=True) as tape3:
-        x_unstacked = tf.unstack(x, axis=1)
-        tape3.watch(x_unstacked)
 
-        # Using nested GradientTape for calculating higher order derivatives
-        with tf.GradientTape() as tape4:
-            # Re-stack x before passing it into u
-            x_stacked = tf.stack(x_unstacked, axis=1)  # shape = (k,n)
-            tape4.watch(x_stacked)
-            u = u_theta(x_stacked)  # shape = (k,)
-
-        # Calculate gradient of u with respect to x
-        du = tape4.batch_jacobian(u, x_stacked)  # shape = (k,n)
-        # Turn df/dx into a list of n tensors of shape (k,)
-        du_unstacked = tf.unstack(du, axis=1)
-    # Calculate laplacian
+# function to evaluate the residuals of the PDEs 
+def get_residuals(Phi_theta,Gamma_theta, x):
+    Phi = Phi_theta(x)
+    Gamma = Gamma_theta(x)
     
-    laplacian_u = tf.zeros(shape=(x.shape[0],), dtype=DTYPE)
-    for df_dxi, xi in zip(du_unstacked, x_unstacked):
-        # Take 2nd derivative of each dimension separately and sum for the laplacian
-        laplacian_u = tf.math.add(tape3.gradient(df_dxi, xi), laplacian_u)  # d/dx_i (df/dx_i)
+    grad_Phi, laplacian_Phi = get_derivatives(Phi_theta, x)
+    grad_Gamma, laplacian_Gamma = get_derivatives(Gamma_theta, x)
+    
+    #print(grad_Phi.shape)
+    #print(laplacian_Phi.shape)
     
     # reshaping vectors to be consistent for required operations
-    m = tf.reshape(m,shape=(m.shape[0],1))
-    u = tf.reshape(u,shape=(m.shape[0],1))
-    laplacian_u = tf.reshape(laplacian_u,shape=(laplacian_u.shape[0],1))
-    laplacian_m = tf.reshape(laplacian_m, shape=(laplacian_m.shape[0], 1))
-    du = tf.cast(tf.reshape(du, shape=(du.shape[0], 2)), dtype=DTYPE)
-    dm = tf.cast(tf.reshape(dm, shape=(dm.shape[0], 2)), dtype=DTYPE)
+    Phi   = tf.reshape(Phi,shape=(Phi.shape[0],1))
+    Gamma = tf.reshape(Gamma,shape=(Gamma.shape[0],1))
     
-    res_Phi = residual_Phi(x,m,dm,laplacian_m,u,du,laplacian_u)
-    res_Gamma= residual_Gamma(x,m,dm,laplacian_m,u,du,laplacian_u)
+    laplacian_Phi = tf.reshape(laplacian_Phi,shape=(laplacian_Phi.shape[0],1))
+    laplacian_Gamma = tf.reshape(laplacian_Gamma, shape=(laplacian_Gamma.shape[0], 1))
     
-    # the weights M_HJB and M_FP are the ones inspired from Anastasia's paper
+    grad_Phi = tf.reshape(grad_Phi, shape=(grad_Phi.shape[0], 2))
+    grad_Gamma = tf.reshape(grad_Gamma, shape=(grad_Gamma.shape[0], 2))
+    #print(grad_Phi.shape)
+    #print(laplacian_Phi.shape)
+    res_Phi = residual_Phi(x, Gamma, grad_Gamma, laplacian_Gamma, Phi, grad_Phi, laplacian_Phi)
+    res_Gamma= residual_Gamma(x, Gamma, grad_Gamma, laplacian_Gamma, Phi, grad_Phi, laplacian_Phi)
+
     return res_Phi, res_Gamma
 
 
@@ -273,7 +264,7 @@ def residual_Gamma(points, Gamma, Gamma_x, Gamma_xx, Phi, Phi_x, Phi_xx):
     term_log = 0#gamma*mu*sigma**2*tf.multiply(Gamma,tf.math.log(Phi))
     
     resFP = l*Gamma + term1  +term2 +term_pot + term_log
-    
+    #print('calcolo residuo Gamma')
     return tf.norm(resFP)
 
 # residual of the HJB
@@ -284,7 +275,7 @@ def residual_Phi(points, Gamma, Gamma_x, Gamma_xx, Phi, Phi_x, Phi_xx):
     term_log = 0#-gamma*mu*sigma**2*tf.multiply(Phi,tf.math.log(Phi))
     
     resHJB = l*Phi + term1  +term2 +term_pot + term_log
-    
+    #print('calcolo residuo Phi')
     return tf.norm(resHJB)
 ########################################################################################################################
 
