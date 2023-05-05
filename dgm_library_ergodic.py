@@ -221,7 +221,7 @@ def get_derivatives(f_theta, x): # function that computes the derivatives using 
     for df_dxi, xi in zip(df_unstacked, x_unstacked):
         # Take 2nd derivative of each dimension separately and sum for the laplacian
         laplacian_f.append(tape1.gradient(df_dxi, xi))  # d/dx_i (df/dx_i)
-
+        
     laplacian_f = sum(laplacian_f)
     return grad_f, laplacian_f
 
@@ -294,12 +294,12 @@ def residual_Phi(points, Gamma, Gamma_x, Gamma_xx, Phi, Phi_x, Phi_xx):
     return tf.norm(resHJB)
 ########################################################################################################################
 
-def compute_loss(Phi_theta,Gamma_theta, X_s):
+def compute_loss(Phi_theta,Gamma_theta, X_b, X_s, X_c):
     
     r_Phi, r_Gamma = get_residuals(Phi_theta,Gamma_theta, X_s) # we compute the residuals
     
     #  we consider the weights used on the report on overleaf
-    #m_bRoom = tf.norm(tf.sqrt(m0) - Gamma_theta(X_b)) + tf.norm(tf.sqrt(m0) - Phi_theta(X_b)) # boundary discrepancy
+    m_bRoom = tf.norm(tf.sqrt(m0) - Gamma_theta(X_b)) + tf.norm(tf.sqrt(m0) - Phi_theta(X_b)) # boundary discrepancy
     # Gamma_cilinder = Gamma_theta(X_r)
     # Gamma_bC = tf.reduce_mean(tf.square(Gamma_cilinder))
 
@@ -307,10 +307,10 @@ def compute_loss(Phi_theta,Gamma_theta, X_s):
     # mass constraint 
     # total mass in the initial condition
     
-    #m_Cyl = tf.norm(Gamma_theta(X_c))+tf.norm(Phi_theta(X_c))
+    m_Cyl = tf.norm(Gamma_theta(X_c))+tf.norm(Phi_theta(X_c))
     
     #mass_conservation = tf.square(current_total_mass-initial_tot_mass)
-    return r_Phi, r_Gamma #r_Phi + r_Gamma + m_bRoom, r_Phi, r_Gamma, m_bRoom + m_Cyl# + mass_conservation
+    return r_Phi + r_Gamma + m_bRoom + m_Cyl, r_Phi, r_Gamma, m_bRoom, m_Cyl# + mass_conservation
 
 
 ########################################################################################################################
