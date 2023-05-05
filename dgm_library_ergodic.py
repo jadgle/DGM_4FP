@@ -326,7 +326,7 @@ def get_grad(Phi,Gamma, X_b, X_s, X_c, target):
 
         g = tape.gradient(loss, Gamma.trainable_variables)
         del tape
-        return loss, g, r_Phi, r_Gamma, m_bRoom
+        return loss, g, r_Phi, r_Gamma, m_bRoom, m_Cyl
     elif target == 'Phi':
         with tf.GradientTape(persistent=True) as tape:
             # This tape is for derivatives with
