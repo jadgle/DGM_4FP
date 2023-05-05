@@ -81,13 +81,27 @@ def env_initializing():
 
 ########################################################################################################################
 # Potential V entering the HJB equation. The value V_const is a parameter defined above
+# def V(Phi,Gamma, x):
+#     U0 = np.zeros(shape = (x.shape[0],1))
+#     for i in range(x.shape[0]):
+#         if tf.less_equal(tf.norm(x[i],'euclidean'),R): # for points in the cilinder
+#             U0[i] = V_const   # we have higher cost
+#     U0 = tf.convert_to_tensor(U0, dtype=DTYPE)
+#     return g * tf.multiply(Phi,Gamma) + U0 # formula for the potential from reference paper
+
 def V(Phi,Gamma, x):
-    U0 = np.zeros(shape = (x.shape[0],1))
+    U0 = tf.zeros(shape = (x.shape[0],1),dtype=DTYPE)
+    U0 = tf.unstack(U0)
     for i in range(x.shape[0]):
         if tf.less_equal(tf.norm(x[i],'euclidean'),R): # for points in the cilinder
-            U0[i] = V_const   # we have higher cost
-    U0 = tf.convert_to_tensor(U0, dtype=DTYPE)
+            U0[i] = tf.constant(V_const,dtype=DTYPE)   # we have higher cost
+        else:
+            U0[i] = tf.constant(0,dtype=DTYPE)   # we have higher cost
+    U0 = tf.stack(U0)
     return g * tf.multiply(Phi,Gamma) + U0 # formula for the potential from reference paper
+
+
+
 
 
 ########################################################################################################################
@@ -244,31 +258,28 @@ def get_residuals(Phi_theta,Gamma_theta, x):
 
 # residual of the Fokker Plank
 def residual_Gamma(points, Gamma, Gamma_x, Gamma_xx, Phi, Phi_x, Phi_xx):
-    term1 = mu*sigma**2*tf.reduce_sum(tf.multiply(s, Gamma_x),1) 
-    term2 = ((mu*sigma**4)/2)*Gamma_xx 
+    term1 = tf.math.scalar_mul(mu*sigma**2,tf.reduce_sum(tf.multiply(s, Gamma_x),1))
+    term2 = tf.math.scalar_mul(((mu*sigma**4)/2),Gamma_xx)
     term_pot = tf.multiply(V(Gamma,Phi,points),Gamma)
     term_log = 0#gamma*mu*sigma**2*tf.multiply(Gamma,tf.math.log(Phi))
     
-    resFP = l*Gamma + term1  +term2 +term_pot + term_log
+    resFP = tf.math.scalar_mul(l,Gamma) + term1  +term2 +term_pot + term_log
     #print('calcolo residuo Gamma')
     return tf.norm(resFP)
 
 # residual of the HJB
 def residual_Phi(points, Gamma, Gamma_x, Gamma_xx, Phi, Phi_x, Phi_xx):
-    print('Type of phi',Phi)
-    term1 = -mu*sigma**2*tf.reduce_sum(tf.multiply(s, Phi_x),1) 
-    term2 = ((mu*sigma**4)/2)*Phi_xx 
+    term1 = -tf.math.scalar_mul(mu*sigma**2,tf.reduce_sum(tf.multiply(s, Phi_x),1))
+    term2 = tf.math.scalar_mul(((mu*sigma**4)/2),Phi_xx)
     term_pot = tf.multiply(V(Gamma,Phi,points),Phi)
     term_log = 0#-gamma*mu*sigma**2*tf.multiply(Phi,tf.math.log(Phi))
     
-    resHJB = l*Phi + term1  +term2 +term_pot + term_log
+    resHJB = tf.math.scalar_mul(l,Phi) + term1  +term2 +term_pot + term_log
     #print('calcolo residuo Phi')
     return tf.norm(resHJB)
 ########################################################################################################################
 
 def compute_loss(Phi_theta,Gamma_theta, X_s):
-    
-    
     
     r_Phi, r_Gamma = get_residuals(Phi_theta,Gamma_theta, X_s) # we compute the residuals
     
@@ -284,7 +295,7 @@ def compute_loss(Phi_theta,Gamma_theta, X_s):
     #m_Cyl = tf.norm(Gamma_theta(X_c))+tf.norm(Phi_theta(X_c))
     
     #mass_conservation = tf.square(current_total_mass-initial_tot_mass)
-    return r_Phi, r_Gamma 
+    return r_Phi, r_Gamma #r_Phi + r_Gamma + m_bRoom, r_Phi, r_Gamma, m_bRoom + m_Cyl# + mass_conservation
 
 
 ########################################################################################################################
