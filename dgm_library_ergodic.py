@@ -38,10 +38,10 @@ Xi = np.sqrt(np.abs((mu*sigma**4)/(2*g*m0)))
 Cs = np.sqrt(np.abs((g*m0)/(2*mu)))
 
 # room limits (changed on march 2023 to be bigger)
-xmin = -6.
-xmax = 6.
-ymin = -6.
-ymax = 6.
+xmin = -2.
+xmax = 2.
+ymin = -2.
+ymax = 2.
 initial_tot_mass = tf.constant(m0 * (xmax-xmin) * (ymax-ymin),dtype=DTYPE)
 
 
@@ -112,10 +112,10 @@ def sample_room(verbose):
     N_s = 5000
     
     # room limits (changed on march 2023 to be bigger)
-    xmin = -6.
-    xmax = 6.
-    ymin = -6.
-    ymax = 6.
+    xmin = -2.
+    xmax = 2.
+    ymin = -2.
+    ymax = 2.
     # Lower bounds
     lb = tf.constant([xmin, ymin], dtype=DTYPE)
     # Upper bounds
