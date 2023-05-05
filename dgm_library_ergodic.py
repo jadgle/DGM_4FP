@@ -182,8 +182,8 @@ def train(Phi_theta,Gamma_theta,verbose):
             print('-----------------------------------------------')
             # for a given sample, take the prescribed number of training steps
             for j in range(steps_per_sample):
-                loss_Phi, r_Phi, r_Gamma, m_bRoom   = train_step_Phi(Phi_theta,Gamma_theta, optimizer_Phi, X_b, X_s, X_c)
-                loss_Gamma, r_Phi, r_Gamma, m_bRoom = train_step_Gamma(Phi_theta,Gamma_theta, optimizer_Gamma, X_b, X_s, X_c)
+                loss_Phi, r_Phi, r_Gamma, m_bRoom, m_Cyl  = train_step_Phi(Phi_theta,Gamma_theta, optimizer_Phi, X_b, X_s, X_c)
+                loss_Gamma, r_Phi, r_Gamma, m_bRoom, m_Cyl = train_step_Gamma(Phi_theta,Gamma_theta, optimizer_Gamma, X_b, X_s, X_c)
                 hist.append(np.mean(np.array([loss_Gamma,loss_Phi])))
                 if verbose > 0:
                     if j % 50 == 0:
@@ -332,29 +332,29 @@ def get_grad(Phi,Gamma, X_b, X_s, X_c, target):
             # This tape is for derivatives with
             # respect to trainable variables
             tape.watch(Phi.trainable_variables)
-            loss, r_Phi, r_Gamma, m_bRoom = compute_loss(Phi,Gamma, X_b, X_s, X_c)
+            loss, r_Phi, r_Gamma, m_bRoom, m_Cyl = compute_loss(Phi,Gamma, X_b, X_s, X_c)
 
         g = tape.gradient(loss, Phi.trainable_variables)
         del tape
-        return loss, g, r_Phi, r_Gamma, m_bRoom
+        return loss, g, r_Phi, r_Gamma, m_bRoom, m_Cyl
 ########################################################################################################################
 
 # Define one training step as a TensorFlow function to increase speed of training
 @tf.function
 def train_step_Phi(Phi,Gamma, optim, X_b, X_s, X_c):
     # Compute current loss and gradient w.r.t. parameters
-    loss_Phi, grad_theta_Phi, r_Phi, r_Gamma, m_bRoom = get_grad(Phi,Gamma, X_b, X_s, X_c, 'Phi')
+    loss_Phi, grad_theta_Phi, r_Phi, r_Gamma, m_bRoom, m_Cyl = get_grad(Phi,Gamma, X_b, X_s, X_c, 'Phi')
     # Perform gradient descent step
     optim.apply_gradients(zip(grad_theta_Phi, Phi.trainable_variables))
-    return loss_Phi, r_Phi, r_Gamma, m_bRoom
+    return loss_Phi,r_Phi, r_Gamma, m_bRoom, m_Cyl
 
 @tf.function
 def train_step_Gamma(Phi,Gamma, optim, X_b, X_s, X_c):
     # Compute current loss and gradient w.r.t. parameters
-    loss_Gamma, grad_theta_Gamma, r_Phi, r_Gamma, m_bRoom = get_grad(Phi,Gamma, X_b, X_s, X_c, 'Gamma')
+    loss_Gamma, grad_theta_Gamma, r_Phi, r_Gamma, m_bRoom, m_Cyl = get_grad(Phi,Gamma, X_b, X_s, X_c, 'Gamma')
     # Perform gradient descent step
     optim.apply_gradients(zip(grad_theta_Gamma, Gamma.trainable_variables))
-    return loss_Gamma, r_Phi, r_Gamma, m_bRoom
+    return loss_Gamma,r_Phi, r_Gamma, m_bRoom, m_Cyl
 
 
 #######################################################################################################################
