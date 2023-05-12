@@ -1,0 +1,29 @@
+{
+ 
+"mfg_params":{
+    "V":-10e2,
+    "xi": 0.2,
+    "c_s": 0.2,
+    "mu": 1,
+    "gamma": 0,
+    "alpha": 0,
+},
+
+"dgm_params":{
+    "RNN_layers": 0,
+    "FNN_layers": 1,
+    "nodes_per_layer":10,
+    "activation": "tanh",
+    "training_steps": 2001
+},
+
+"room":{
+    "m0": 2.5,
+    "R": 0.37,
+    "s": 0.3,
+    "lx": 2.,
+    "ly": 2.,
+    "Nb": 200,
+    "Ns": 2000
+ }
+ }

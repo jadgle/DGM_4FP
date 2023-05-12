@@ -21,8 +21,6 @@ env_initializing()
 #######################################################################################################################
 DTYPE = 'float32'
 
-Phi_theta = init_DGM(RNN_layers = 0, FNN_layers=1, nodes_per_layer=10,activation="tanh")
-Gamma_theta = init_DGM(RNN_layers = 0, FNN_layers=1, nodes_per_layer=10,activation="tanh")
 
 phi = np.genfromtxt('phi.txt')
 gamma = np.genfromtxt('gamma.txt')
