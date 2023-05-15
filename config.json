@@ -10,11 +10,11 @@
 },
 
 "dgm_params":{
-    "RNN_layers": 0,
-    "FNN_layers": 1,
-    "nodes_per_layer": 5,
-    "activation": "relu",
-    "training_steps": 2001
+    "RNN_layers": 2,
+    "FNN_layers": 2,
+    "nodes_per_layer": 100,
+    "activation": "tanh",
+    "training_steps": 200
 },
 
 "room":{
@@ -23,7 +23,7 @@
     "s": 0.3,
     "lx": 2,
     "ly": 2,
-    "Nb": 200,
-    "Ns": 2000
+    "N_b": 200,
+    "N_in": 5000
  }
  }
