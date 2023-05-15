@@ -1,7 +1,7 @@
 # authors: Sara Bicego, Matteo Butano
 # emails: s.bicego21@imperial.ac.uk, matteo.butano@universite-paris-saclay.fr
 
-from DGM import  DGMNet
+from DGM import DGMNet
 import pandas as pd
 import tensorflow as tf
 from keras import backend as K
@@ -18,30 +18,30 @@ class neural_mfg:
         with open('dgm_config.json') as f:
             var = json.loads(f.read())
         
-        self.self.DTYPE = 'float32'
+        self.DTYPE = 'float32'
        
         # MFG parameters 
-        self.xi   = var['xi']
-        self.c_s  = var['c_s']
-        self.mu   = var['mu']
-        self. m_0 = var['m_0']
+        self.xi    = var['mfg_params']['xi']
+        self.c_s   = var['mfg_params']['c_s']
+        self.mu    = var['mfg_params']['mu']
+        self.m_0  = var['room']['m_0']
         self.g     = -(2*self.xi**2)/self.m_0
         self.sigma = np.sqrt(2*self.xi*self.c_s)
         self.l     = -self.g*self.m_0
         self.u_b   = -self.mu*self.sigma**2*np.log(np.sqrt(self.m_0))
         self.R     = 0.37
-        self.s     =  tf.constant([0, -var['s']],  dtype=self.DTYPE, shape=(1, 2))
-        self.V = var['V']
+        self.s     =  tf.constant([0, -var['room']['s']],  dtype=self.DTYPE, shape=(1, 2))
+        self.V     = var['mfg_params']['V']
         
         # NN parameters
-        self.training_steps = var['training_steps']
+        self.training_steps = var['dgm_params']['training_steps']
         
         
         # Room definition 
-        self.lx = var['lx']
-        self.ly = var['ly']
-        self.N_b = var['Nb']
-        self.N_in = var['Ns']
+        self.lx   = var['room']['lx']
+        self.ly   = var['room']['ly']
+        self.N_b  = var['room']['Nb']
+        self.N_in = var['room']['Ns']
         
         
         # Seed value
@@ -61,9 +61,15 @@ class neural_mfg:
         # Set data type
         tf.keras.backend.set_floatx(self.DTYPE)
         
-        self.phi_theta = DGMNet(RNN_layers = var['RNN_layers'], FNN_layers = var['FNN_layers'], 
-                             nodes_per_layer = var['nodes_per_layer'], activation = var['tanh'])
-        self.gamma_theta = DGMNet(RNN_layers = 0, FNN_layers=1, nodes_per_layer=10,activation="tanh")
+        self.phi_theta   = DGMNet(var['dgm_params']['nodes_per_layer'],
+                                var['dgm_params']['RNN_layers'],
+                                var['dgm_params']['FNN_layers'], 2,
+                                var['dgm_params']['activation'])
+        
+        self.gamma_theta = DGMNet(var['dgm_params']['nodes_per_layer'],
+                                var['dgm_params']['RNN_layers'],
+                                var['dgm_params']['FNN_layers'], 2,
+                                var['dgm_params']['activation'])
         
         self.X_b, self.X_in, self.X_out = self.sample_room()
     
@@ -94,8 +100,8 @@ class neural_mfg:
         ub = tf.constant([self.lx, self.ly], dtype=self.DTYPE)
     
         # Draw uniform sample points for data in the domain
-        x_room = tf.random.uniform((self.Ns, 1), lb[0], ub[0], dtype=self.DTYPE)
-        y_room = tf.random.uniform((self.Ns, 1), lb[1], ub[1], dtype=self.DTYPE)
+        x_room = tf.random.uniform((self.N_in, 1), lb[0], ub[0], dtype=self.DTYPE)
+        y_room = tf.random.uniform((self.N_in, 1), lb[1], ub[1], dtype=self.DTYPE)
         X_room = tf.concat([x_room, y_room], axis=1)
         
         # Divide between points inside and outside the cylinder
@@ -107,10 +113,10 @@ class neural_mfg:
         X_out = tf.squeeze(X_out)
     
         # Boundary data (square - outside walls)
-        x_b1 = lb[0] + (ub[0] - lb[0]) * tf.keras.backend.random_bernoulli((self.Nb, 1), 0.5, dtype=self.DTYPE)
-        y_b1 = tf.random.uniform((self.Nb, 1), lb[1], ub[1], dtype=self.DTYPE)
-        y_b2 = lb[1] + (ub[1] - lb[1]) * tf.keras.backend.random_bernoulli((self.Nb, 1), 0.5, dtype=self.DTYPE)
-        x_b2 = tf.random.uniform((self.Nb, 1), lb[0], ub[0], dtype=self.DTYPE)
+        x_b1 = lb[0] + (ub[0] - lb[0]) * tf.keras.backend.random_bernoulli((self.N_b, 1), 0.5, dtype=self.DTYPE)
+        y_b1 = tf.random.uniform((self.N_b, 1), lb[1], ub[1], dtype=self.DTYPE)
+        y_b2 = lb[1] + (ub[1] - lb[1]) * tf.keras.backend.random_bernoulli((self.N_b, 1), 0.5, dtype=self.DTYPE)
+        x_b2 = tf.random.uniform((self.N_b, 1), lb[0], ub[0], dtype=self.DTYPE)
         x_b = tf.concat([x_b1, x_b2], axis=0)
         y_b = tf.concat([y_b1, y_b2], axis=0)
         X_b = tf.concat([x_b, y_b], axis=1)
@@ -280,39 +286,41 @@ class neural_mfg:
         return loss_Gamma,r_Phi, r_Gamma, m_bRoom, m_Cyl
     
  
-    def warmstart(self,phi_IC,gamma_IC,IC_points):
+    def warmstart_step(self,f_theta,f_IC,points_IC):
         
         optimizer = tf.optimizers.Adam()
-        points = IC_points
-
+        
+        f_IC   = pd.DataFrame(f_IC).astype(dtype = self.DTYPE)
+        points_IC   = pd.DataFrame(points_IC).astype(dtype = self.DTYPE)
+        
+        f_prediction = f_theta(points_IC)
+        f_loss = tf.norm(f_prediction - f_IC)
+        
+        # Compute gradient wrt variables for phi and gamma
+        
+        with tf.GradientTape() as f_tape:
+            
+            f_vars = f_theta.trainable_weights
+            f_tape.watch(f_vars)
+    
+        f_grad = f_tape.gradient(f_loss,f_vars)
+        del f_tape
+        
+        print(f_grad)
+       
+        optimizer.apply_gradients(zip(f_grad, f_vars))
+        
+        return f_loss
+ 
+    def warmstart(self,phi_IC,gamma_IC,points_IC):
+        
         for step in range(self.training_steps):
             
             # Compute loss for phi and gamma
-            phi_pred = self.phi_theta(points)
-            gamma_pred = self.gamma_theta(points)
-            phi_loss = tf.norm(phi_pred - phi_IC)
-            gamma_loss = tf.norm(gamma_pred - gamma_IC)
             
-            # Compute gradient wrt variables for phi and gamma
-            
-            with tf.GradientTape(persistent=True) as phi_tape:
-                phi_vars = self.phi_theta.trainable_variables
-                phi_tape.watch(phi_vars)
-        
-            phi_grad = phi_tape.gradient(phi_loss,phi_vars)
-            del phi_tape
-            
-            with tf.GradientTape(persistent=True) as gamma_tape:
-                gamma_vars = self.gamma_theta.trainable_variables
-                gamma_tape.watch(gamma_vars)
-        
-            gamma_grad = gamma_tape.gradient(gamma_loss,gamma_vars)
-            del gamma_tape
-            
-            
-            optimizer.apply_gradients(zip(phi_grad, self.phi_theta.trainable_variables))
-            optimizer.apply_gradients(zip(gamma_grad, self.gamma_theta.trainable_variables))
-                                      
+            phi_loss = self.warmstart_step(self.phi_theta,phi_IC,points_IC)
+            gamma_loss = self.warmstart_step(self.gamma_theta,gamma_IC,points_IC)
+           
             if step % 50 == 0:
                 print('Warmstart phi: step {:04d}, loss = {:10.8e}'.format(step, phi_loss))
                 print('Warmstart gamma: step {:04d}, loss = {:10.8e}'.format(step, gamma_loss))
