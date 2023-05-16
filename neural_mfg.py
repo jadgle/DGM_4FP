@@ -167,7 +167,9 @@ class dgm_net:
         
         res_obstacle = tf.norm(self.phi_theta(self.X_in)) + tf.norm(self.gamma_theta(self.X_in))
        
-        return res_HJB + res_KFP + res_b_gamma + res_b_phi + res_obstacle
+        print('res_HJB={:10.3e}, res_KFP={:10.3e}, res_b_phi={:10.3e}, res_b_gamma={:10.3e}, res_obstacle={:10.3e}'.format(res_HJB,res_KFP,res_b_phi,res_b_gamma,res_obstacle))
+    
+        return res_HJB + res_KFP + res_b_gamma + res_b_phi
       
     def train_step(self,f_theta):
         
@@ -193,7 +195,7 @@ class dgm_net:
             phi_loss = self.train_step(self.phi_theta)
             gamma_loss = self.train_step(self.gamma_theta)
            
-            if step % 10 == 0:
+            if step % 1 == 0:
                 print('Training step {}, loss phi={:10.3e}, loss gamma={:10.3e}'.format(step, phi_loss,gamma_loss))
      
     
@@ -227,7 +229,7 @@ class dgm_net:
             phi_loss = self.warmstart_step(self.phi_theta,phi_IC,points_IC)
             gamma_loss = self.warmstart_step(self.gamma_theta,gamma_IC,points_IC)
            
-            if step % 10 == 0:
+            if step % 1 == 0:
                 print('WS step {}, loss phi={:10.3e}, loss gamma={:10.3e}'.format(step, phi_loss,gamma_loss))
      
     def draw(self):

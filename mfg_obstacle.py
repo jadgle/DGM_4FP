@@ -2,21 +2,26 @@
 
 import numpy as np
 import time
+import json
 
 # Main Parameters
-xi = 0.2
-c_s = 0.2
-Lx = 2
-Ly = 2
-Nx = 150
-Ny = 150
+
+with open('config.json') as f:
+    var = json.loads(f.read())
+     
+xi = var['mfg_params']['xi']
+c_s = var['mfg_params']['c_s']
+Lx = var['room']['lx']
+Ly = var['room']['ly']
+Nx = var['room']['nx']
+Ny = var['room']['ny']
 
 # Constants
-R = 0.37
-s = 0.3
-m_0 = 2.5
-mu = 1
-V = -10e2
+R = var['room']['R']
+s = var['room']['s']
+m_0 = var['room']['m_0']
+mu = var['mfg_params']['mu']
+V = var['mfg_params']['V']
 g = -(2*c_s**2)/m_0
 sigma = np.sqrt(2*xi*c_s)
 lam = -g*m_0 
@@ -71,7 +76,7 @@ def simulation(m,alpha,s):
         q = np.flip(p,0)
         m = alpha*p*q + (1-alpha)*mn
         l2norm = L2_error(m,mn)
-        print(l2norm)
+        print('Error = {:10.3e}'.format(l2norm))
     end = time.time()
     run = int(end-start)
     print('Program executed in ',run//3600,'h ',run//60,'m ',run%60,'s')
@@ -92,6 +97,6 @@ m,p,q = sim[0],sim[1],sim[2]
 v = vel(m,p,q)
 vx,vy = v[0],v[1] 
 
-np.savetxt('phi.txt',p.reshape((Nx*Ny,1)))
-np.savetxt('gamma.txt',q.reshape((Nx*Ny,1)))
-np.savetxt('points.txt',np.concatenate([X.reshape((Nx*Ny,1)),Y.reshape((Nx*Ny,1))],axis = 1))
+np.savetxt('IC/phi.txt',p.reshape((Nx*Ny,1)))
+np.savetxt('IC/gamma.txt',q.reshape((Nx*Ny,1)))
+np.savetxt('IC/points.txt',np.concatenate([X.reshape((Nx*Ny,1)),Y.reshape((Nx*Ny,1))],axis = 1))
