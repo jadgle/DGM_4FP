@@ -37,13 +37,11 @@ class dgm_net:
         # NN parameters
         self.training_steps = var['dgm_params']['training_steps']
         
-        
         # Room definition 
         self.lx   = var['room']['lx']
         self.ly   = var['room']['ly']
         self.N_b  = var['room']['N_b']
         self.N_in = var['room']['N_in']
-        
         
         # Seed value
         self.seed_value = 0
@@ -76,9 +74,6 @@ class dgm_net:
     
         return
     
-    
-    
-    # Potential V entering the HJB equation. The value V_const is a parameter defined above
     def V(self,phi,gamma):
         
         all_pts = tf.concat([self.X_out,self.X_in,self.X_b],axis = 0)
@@ -95,8 +90,7 @@ class dgm_net:
         m = tf.multiply(phi,gamma)
         
         return tf.reduce_sum(tf.math.scalar_mul(self.g,m) + U0,axis = 1) # formula for the potential from reference  
-  
-    # Here we sample the points on which we will train the NN  
+      
     def sample_room(self):
         
         # Lower bounds
@@ -126,7 +120,6 @@ class dgm_net:
         y_b = tf.concat([y_b1, y_b2], axis=0)
         X_b = tf.concat([x_b, y_b], axis=1)
 
-        
         return pd.DataFrame(X_b.numpy()), pd.DataFrame(X_in.numpy()), pd.DataFrame(X_out.numpy())
  
     def get_loss(self):
@@ -176,14 +169,41 @@ class dgm_net:
        
         return res_HJB + res_KFP + res_b_gamma + res_b_phi + res_obstacle
       
- 
+    def train_step(self,f_theta):
+        
+        optimizer = tf.optimizers.Adam()
+        
+        with tf.GradientTape() as f_tape:
+            
+            f_vars = f_theta.trainable_weights
+            f_tape.watch(f_vars)
+            f_loss = self.get_loss()
+            f_grad = f_tape.gradient(f_loss,f_vars)
+        
+        optimizer.apply_gradients(zip(f_grad, f_vars))
+        
+        return f_loss
+    
+    def train(self):
+        
+        for step in range(self.training_steps + 1):
+            
+            # Compute loss for phi and gamma
+            
+            phi_loss = self.train_step(self.phi_theta)
+            gamma_loss = self.train_step(self.gamma_theta)
+           
+            if step % 10 == 0:
+                print('Training step {}, loss phi={:10.3e}, loss gamma={:10.3e}'.format(step, phi_loss,gamma_loss))
+     
+    
     def warmstart_step(self,f_theta,f_IC,points_IC):
         
         optimizer = tf.optimizers.Adam()
         
         f_IC   = pd.DataFrame(f_IC).astype(dtype = self.DTYPE)
         points_IC   = pd.DataFrame(points_IC).astype(dtype = self.DTYPE)
-       
+        
         # Compute gradient wrt variables for phi and gamma
         
         with tf.GradientTape() as f_tape:
@@ -194,8 +214,6 @@ class dgm_net:
             f_loss = tf.norm(f_prediction - f_IC)
             f_grad = f_tape.gradient(f_loss,f_vars)
             
-        del f_tape
-       
         optimizer.apply_gradients(zip(f_grad, f_vars))
         
         return f_loss
@@ -209,8 +227,8 @@ class dgm_net:
             phi_loss = self.warmstart_step(self.phi_theta,phi_IC,points_IC)
             gamma_loss = self.warmstart_step(self.gamma_theta,gamma_IC,points_IC)
            
-            if step % 50 == 0:
-                print('WS step {:04d}, loss phi={:10.3e}, loss gamma={:10.3e}'.format(step, phi_loss,gamma_loss))
+            if step % 10 == 0:
+                print('WS step {}, loss phi={:10.3e}, loss gamma={:10.3e}'.format(step, phi_loss,gamma_loss))
      
     def draw(self):
         
@@ -222,6 +240,5 @@ class dgm_net:
          plt.scatter(all_pts.numpy()[:,0], all_pts.numpy()[:,1], c=m, cmap='hot_r')
          plt.xlabel('$x$')
          plt.ylabel('$y$')
-         plt.clim([0,3])
          plt.colorbar()
          plt.show()     
