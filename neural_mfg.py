@@ -36,12 +36,13 @@ class dgm_net:
         
         # NN parameters
         self.training_steps = var['dgm_params']['training_steps']
+        self.learning_rate = var['dgm_params']['learning_rate']
         
         # Room definition 
         self.lx   = var['room']['lx']
         self.ly   = var['room']['ly']
-        self.N_b  = var['room']['N_b']
-        self.N_in = var['room']['N_in']
+        self.N_b  = int(var['room']['N_b'])
+        self.N_in = int(var['room']['N_in'])
         
         # Seed value
         self.seed_value = 0
@@ -154,26 +155,26 @@ class dgm_net:
         term_lap_HJB = tf.math.scalar_mul(((self.mu*self.sigma**4)/2),lap_phi)
         term_pot_HJB = tf.multiply(self.V(phi,gamma),phi[:,0])
         
-        res_HJB = tf.norm(tf.math.scalar_mul(self.l,phi[:,0]) + term_pot_HJB +  term_lap_HJB - term_vel_HJB)
+        res_HJB = tf.reduce_mean((tf.math.scalar_mul(self.l,phi[:,0]) + term_pot_HJB +  term_lap_HJB - term_vel_HJB)**2)
         
         term_vel_KFP = tf.math.scalar_mul(self.mu*self.sigma**2,tf.reduce_sum(tf.multiply(self.s, grad_gamma),1))
         term_lap_KFP = tf.math.scalar_mul(((self.mu*self.sigma**4)/2),lap_gamma)
         term_pot_KFP = tf.multiply(self.V(phi,gamma),gamma[:,0])
        
-        res_KFP = tf.norm(tf.math.scalar_mul(self.l,gamma[:,0]) + term_pot_KFP +  term_lap_KFP + term_vel_KFP)
+        res_KFP = tf.reduce_mean((tf.math.scalar_mul(self.l,gamma[:,0]) + term_pot_KFP +  term_lap_KFP + term_vel_KFP)**2)
         
-        res_b_phi = tf.norm(tf.sqrt(self.m_0) - self.phi_theta(self.X_b))
-        res_b_gamma = tf.norm(tf.sqrt(self.m_0) - self.gamma_theta(self.X_b))
+        res_b_phi = tf.reduce_mean((tf.sqrt(self.m_0) - self.phi_theta(self.X_b))**2)
+        res_b_gamma = tf.reduce_mean((tf.sqrt(self.m_0) - self.gamma_theta(self.X_b))**2)
         
-        res_obstacle = tf.norm(self.phi_theta(self.X_in)) + tf.norm(self.gamma_theta(self.X_in))
+        res_obstacle = tf.reduce_mean((self.phi_theta(self.X_in))**2) + tf.reduce_mean((self.gamma_theta(self.X_in))**2)
        
         print('res_HJB={:10.3e}, res_KFP={:10.3e}, res_b_phi={:10.3e}, res_b_gamma={:10.3e}, res_obstacle={:10.3e}'.format(res_HJB,res_KFP,res_b_phi,res_b_gamma,res_obstacle))
     
-        return res_HJB + res_KFP + res_b_gamma + res_b_phi
+        return res_HJB + res_KFP + res_b_gamma + res_b_phi + res_obstacle
       
     def train_step(self,f_theta):
         
-        optimizer = tf.optimizers.Adam()
+        optimizer = tf.optimizers.Adam(learning_rate = self.learning_rate)
         
         with tf.GradientTape() as f_tape:
             
@@ -201,7 +202,9 @@ class dgm_net:
     
     def warmstart_step(self,f_theta,f_IC,points_IC):
         
-        optimizer = tf.optimizers.Adam()
+        #all_pts = tf.concat([self.X_out,self.X_in,self.X_b],axis = 0)
+        
+        optimizer = tf.optimizers.Adam(learning_rate = self.learning_rate)
         
         f_IC   = pd.DataFrame(f_IC).astype(dtype = self.DTYPE)
         points_IC   = pd.DataFrame(points_IC).astype(dtype = self.DTYPE)
@@ -213,7 +216,7 @@ class dgm_net:
             f_vars = f_theta.trainable_weights
             f_tape.watch(f_vars)
             f_prediction = f_theta(points_IC)
-            f_loss = tf.norm(f_prediction - f_IC)
+            f_loss = tf.reduce_mean((f_prediction - f_IC)**2)
             f_grad = f_tape.gradient(f_loss,f_vars)
             
         optimizer.apply_gradients(zip(f_grad, f_vars))
@@ -229,7 +232,7 @@ class dgm_net:
             phi_loss = self.warmstart_step(self.phi_theta,phi_IC,points_IC)
             gamma_loss = self.warmstart_step(self.gamma_theta,gamma_IC,points_IC)
            
-            if step % 1 == 0:
+            if step % 100 == 0:
                 print('WS step {}, loss phi={:10.3e}, loss gamma={:10.3e}'.format(step, phi_loss,gamma_loss))
      
     def draw(self):
