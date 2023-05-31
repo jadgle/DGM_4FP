@@ -15,6 +15,14 @@ import matplotlib.pyplot as plt
 class dgm_net:
     
     def __init__(self):
+        '''
+        Initialise the two NNs for Phi and Theta, creates points.
+
+        Returns
+        -------
+        None.
+
+        '''
         
         with open('config.json') as f:
             var = json.loads(f.read())
@@ -29,7 +37,6 @@ class dgm_net:
         self.g     = -(2*self.xi**2)/self.m_0
         self.sigma = np.sqrt(2*self.xi*self.c_s)
         self.l     = -self.g*self.m_0
-        self.u_b   = -self.mu*self.sigma**2*np.log(np.sqrt(self.m_0))
         self.R     = 0.37
         self.s     =  tf.constant([0, -var['room']['s']],  dtype=self.DTYPE, shape=(1, 2))
         self.pot     = var['mfg_params']['V']
@@ -76,6 +83,22 @@ class dgm_net:
         return
     
     def V(self,phi,gamma):
+        '''
+        Describes the potential of the cost-functional
+
+        Parameters
+        ----------
+        phi : tensorflow.tensor
+            Values of phi_theta over training points.
+        gamma : tensorflow.tensor
+            Values of gamma_theta over training points.
+
+        Returns
+        -------
+        tensorflow.tensor
+            Values of the potential over the training points.
+
+        '''
         
         all_pts = tf.concat([self.X_out,self.X_in,self.X_b],axis = 0)
         
@@ -93,6 +116,15 @@ class dgm_net:
         return tf.reduce_sum(tf.math.scalar_mul(self.g,m) + U0,axis = 1) # formula for the potential from reference  
       
     def sample_room(self):
+        '''
+        Samples the training points, randomly over simulation area.
+
+        Returns
+        -------
+        pandas.DataFrame, pandas.DataFrame, pandas.DataFrame
+            Three dataframes containing boundary points, points inside and outside the cylinder.
+
+        '''
         
         # Lower bounds
         lb = tf.constant([-self.lx, -self.ly], dtype=self.DTYPE)
@@ -124,6 +156,15 @@ class dgm_net:
         return pd.DataFrame(X_b.numpy()), pd.DataFrame(X_in.numpy()), pd.DataFrame(X_out.numpy())
  
     def get_loss(self):
+        '''
+        Computes loss function by calculating the residuals.
+
+        Returns
+        -------
+        tensorflow.tensor
+            Loss function sum of the different residuals.
+
+        '''
         
         all_pts = tf.Variable(tf.concat([self.X_out,self.X_in,self.X_b],axis = 0))
         
@@ -137,7 +178,7 @@ class dgm_net:
             grad_phi = phi_tape_2.gradient(phi,all_pts)
         
         jac_phi = phi_tape_1.gradient(grad_phi,all_pts)
-        lap_phi = tf.math.reduce_sum(jac_phi,axis = 1)
+        lap_phi = tf.math.reduce_sum(jac_phi,axis = 2)
         
         # Compute gradient and laplacian for Gamma
         
@@ -149,16 +190,16 @@ class dgm_net:
             grad_gamma = gamma_tape_2.gradient(gamma,all_pts)
         
         jac_gamma = gamma_tape_1.gradient(grad_gamma,all_pts)
-        lap_gamma = tf.math.reduce_sum(jac_gamma,axis = 1)
+        lap_gamma = tf.math.reduce_sum(jac_gamma,axis = 2)
         
         term_vel_HJB = tf.math.scalar_mul(self.mu*self.sigma**2,tf.reduce_sum(tf.multiply(self.s, grad_phi),1))
-        term_lap_HJB = tf.math.scalar_mul(((self.mu*self.sigma**4)/2),lap_phi)
+        term_lap_HJB = tf.math.scalar_mul((self.mu*self.sigma**4)/2,lap_phi)
         term_pot_HJB = tf.multiply(self.V(phi,gamma),phi[:,0])
         
         res_HJB = tf.reduce_mean((tf.math.scalar_mul(self.l,phi[:,0]) + term_pot_HJB +  term_lap_HJB - term_vel_HJB)**2)
         
         term_vel_KFP = tf.math.scalar_mul(self.mu*self.sigma**2,tf.reduce_sum(tf.multiply(self.s, grad_gamma),1))
-        term_lap_KFP = tf.math.scalar_mul(((self.mu*self.sigma**4)/2),lap_gamma)
+        term_lap_KFP = tf.math.scalar_mul((self.mu*self.sigma**4)/2,lap_gamma)
         term_pot_KFP = tf.multiply(self.V(phi,gamma),gamma[:,0])
        
         res_KFP = tf.reduce_mean((tf.math.scalar_mul(self.l,gamma[:,0]) + term_pot_KFP +  term_lap_KFP + term_vel_KFP)**2)
@@ -173,6 +214,20 @@ class dgm_net:
         return res_HJB + res_KFP + res_b_gamma + res_b_phi + res_obstacle
       
     def train_step(self,f_theta):
+        '''
+        Applies one training to the NN in input
+
+        Parameters
+        ----------
+        f_theta : DGMNet
+            Neural network created using the DGM package.
+
+        Returns
+        -------
+        f_loss : tensorflow.tensor
+            Value of the loss function.
+
+        '''
         
         optimizer = tf.optimizers.Adam(learning_rate = self.learning_rate)
         
@@ -188,6 +243,14 @@ class dgm_net:
         return f_loss
     
     def train(self):
+        '''
+        Repetetively applies self.training_steps. 
+
+        Returns
+        -------
+        None.
+
+        '''
         
         for step in range(self.training_steps + 1):
             
@@ -201,6 +264,24 @@ class dgm_net:
      
     
     def warmstart_step(self,f_theta,f_IC,points_IC):
+        '''
+        Applies one step of warmstart. 
+
+        Parameters
+        ----------
+        f_theta : DGMNet
+            Either Phi_theta or Gamma_theta.
+        f_IC : numpy.array
+            Values of the exact solution for Phi or Gamma reshaped as (nx*ny,1).
+        points_IC : numpy.array
+            Coordinates of the exact solution's grid reshaped as (nx*ny,1).
+
+        Returns
+        -------
+        f_loss : tensorflow.tensor
+            MSE of the difference between NNs and the exact solution.
+
+        '''
         
         #all_pts = tf.concat([self.X_out,self.X_in,self.X_b],axis = 0)
         
@@ -224,6 +305,23 @@ class dgm_net:
         return f_loss
  
     def warmstart(self,phi_IC,gamma_IC,points_IC):
+        '''
+        Applies self.training_steps of warmstart
+
+        Parameters
+        ----------
+        phi_IC : numpy.array
+            Values of the exact solution for Phi reshaped as (nx*ny,1).
+        gamma_IC : numpy.array
+            Values of the exact solution for Gamma reshaped as (nx*ny,1)..
+        points_IC : numpy.array
+            Coordinates of the exact solution's grid reshaped as (nx*ny,1).
+
+        Returns
+        -------
+        None.
+
+        '''
         
         for step in range(self.training_steps + 1):
             
@@ -236,14 +334,21 @@ class dgm_net:
                 print('WS step {}, loss phi={:10.3e}, loss gamma={:10.3e}'.format(step, phi_loss,gamma_loss))
      
     def draw(self):
+        '''
+        Draw the scatter plot of the density of pedestrians.
+
+        Returns
+        -------
+        None.
+
+        '''
+        all_pts = tf.concat([self.X_out,self.X_in,self.X_b],axis = 0)
         
-         all_pts = tf.concat([self.X_out,self.X_in,self.X_b],axis = 0)
-        
-         m = self.gamma_theta(all_pts)*self.phi_theta(all_pts)
+        m = self.gamma_theta(all_pts)*self.phi_theta(all_pts)
          
-         plt.figure(figsize=(10,10))
-         plt.scatter(all_pts.numpy()[:,0], all_pts.numpy()[:,1], c=m, cmap='hot_r')
-         plt.xlabel('$x$')
-         plt.ylabel('$y$')
-         plt.colorbar()
-         plt.show()     
+        plt.figure(figsize=(10,10))
+        plt.scatter(all_pts.numpy()[:,0], all_pts.numpy()[:,1], c=m, cmap='hot_r')
+        plt.xlabel('$x$')
+        plt.ylabel('$y$')
+        plt.colorbar()
+        plt.show()     
