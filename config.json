@@ -10,9 +10,9 @@
 },
 
 "dgm_params":{
-    "RNN_layers"     : 2,
-    "FNN_layers"     : 2,
-    "nodes_per_layer": 64,
+    "RNN_layers"     : 3,
+    "FNN_layers"     : 3,
+    "nodes_per_layer": 128,
     "activation"     : "tanh",
     "training_steps" : 3000,
     "learning_rate"  : 0.0001
@@ -27,6 +27,6 @@
     "nx"  : 200,
     "ny"  : 200,
     "N_b" : 500,
-    "N_in": 8000
+    "N_in": 20000
  }
  }
