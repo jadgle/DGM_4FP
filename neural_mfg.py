@@ -193,7 +193,7 @@ class dgm_net:
     
     def train(self):
         print(' #iter       res_HJB          res_KFP          res_b_phi        res_b_gamma      res_obstacle     res_total_mass')
-        print('--------------------------------------------------------------------------------------------------------------')
+        print('-----------------------------------------------------------------------------------------------------------------')
         for step in range(1,self.training_steps + 1):
             print('{:6d}'.format(step),end="")
             # Compute loss for phi and gamma
