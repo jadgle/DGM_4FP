@@ -51,6 +51,9 @@ class dgm_net:
         self.N_b  = int(var['room']['N_b'])
         self.N_in = int(var['room']['N_in'])
         
+        # Initial total mass
+        self.total_mass = tf.constant(self.m_0*(2*self.lx)*(2*self.ly),dtype=self.DTYPE)
+        
         # Seed value
         self.seed_value = 0
         os.environ['PYTHONHASHSEED'] = str(self.seed_value)
@@ -209,9 +212,11 @@ class dgm_net:
         
         res_obstacle = tf.reduce_mean((self.phi_theta(self.X_in))**2) + tf.reduce_mean((self.gamma_theta(self.X_in))**2)
        
-        print('res_HJB={:10.3e}, res_KFP={:10.3e}, res_b_phi={:10.3e}, res_b_gamma={:10.3e}, res_obstacle={:10.3e}'.format(res_HJB,res_KFP,res_b_phi,res_b_gamma,res_obstacle))
+        res_total_mass = tf.reduce_mean((gamma*phi*(2*self.lx)*(2*self.ly)-self.total_mass)**2) 
+       
+        print('      {:10.3e}       {:10.3e}       {:10.3e}       {:10.3e}       {:10.3e}       {:10.3e}'.format(res_HJB,res_KFP,res_b_phi,res_b_gamma,res_obstacle,res_total_mass))
     
-        return res_HJB + res_KFP + res_b_gamma + res_b_phi + res_obstacle
+        return res_HJB + res_KFP + res_b_gamma + res_b_phi + res_obstacle + res_total_mass
       
     def train_step(self,f_theta):
         '''
@@ -252,16 +257,14 @@ class dgm_net:
 
         '''
         
-        for step in range(self.training_steps + 1):
-            
+        print(' #iter       res_HJB          res_KFP          res_b_phi        res_b_gamma      res_obstacle     res_total_mass')
+        print('-----------------------------------------------------------------------------------------------------------------')
+        for step in range(1,self.training_steps + 1):
+            print('{:6d}'.format(step),end="")
             # Compute loss for phi and gamma
-            
             phi_loss = self.train_step(self.phi_theta)
+            print('      ',end="")
             gamma_loss = self.train_step(self.gamma_theta)
-           
-            if step % 1 == 0:
-                print('Training step {}, loss phi={:10.3e}, loss gamma={:10.3e}'.format(step, phi_loss,gamma_loss))
-     
     
     def warmstart_step(self,f_theta,f_IC,points_IC):
         '''
@@ -331,7 +334,7 @@ class dgm_net:
             gamma_loss = self.warmstart_step(self.gamma_theta,gamma_IC,points_IC)
            
             if step % 100 == 0:
-                print('WS step {}, loss phi={:10.3e}, loss gamma={:10.3e}'.format(step, phi_loss,gamma_loss))
+                print('WS step {:5d}, loss phi={:10.3e}, loss gamma={:10.3e}'.format(step, phi_loss,gamma_loss))
      
     def draw(self):
         '''
@@ -346,9 +349,10 @@ class dgm_net:
         
         m = self.gamma_theta(all_pts)*self.phi_theta(all_pts)
          
-        plt.figure(figsize=(10,10))
+        plt.figure(figsize=(8,8))
         plt.scatter(all_pts.numpy()[:,0], all_pts.numpy()[:,1], c=m, cmap='hot_r')
         plt.xlabel('$x$')
         plt.ylabel('$y$')
         plt.colorbar()
+        plt.clim(vmin = 0)
         plt.show()     
