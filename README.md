@@ -14,6 +14,6 @@ where the first two terms ensure that the nets solve the equations, more precise
 
 $$res_{\text{HJB}} = -\lambda \Phi_{\theta}- \frac{\mu \sigma^4}{2}\Delta \Phi_{\theta} -V[m^e]\Phi_{\theta}+\gamma\mu\sigma^2\Phi_{\theta}\log{\Phi_{\theta}},$$
 
-$$res_{\text{KFP}} =\lambda \Gamma^e + \frac{\mu\sigma^4}{2} \Delta \Gamma^e + V[m^e]\Gamma^e -\gamma \mu \sigma^2\Gamma^e \log{\Phi^e},$$
+$$res_{\text{KFP}} =\lambda \Gamma_{\theta} + \frac{\mu\sigma^4}{2} \Delta \Gamma_{\theta} + V[m^e]\Gamma_{\theta} -\gamma \mu \sigma^2\Gamma_{\theta} \log{\Phi_{\theta}},$$
 
 the boundary one checks that far from the obstacle the density of pedestrians is at rest at a given value, the obstacle term makes sure no one is under the cylinder and the mass term prevent agents from disappearing.
