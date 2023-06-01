@@ -178,7 +178,7 @@ class dgm_net:
             grad_phi = phi_tape_2.gradient(phi,all_pts)
         
         jac_phi = phi_tape_1.gradient(grad_phi,all_pts)
-        lap_phi = tf.math.reduce_sum(jac_phi,axis = 2)
+        lap_phi = tf.math.reduce_sum(jac_phi,axis = 1)
         
         # Compute gradient and laplacian for Gamma
         
@@ -190,7 +190,7 @@ class dgm_net:
             grad_gamma = gamma_tape_2.gradient(gamma,all_pts)
         
         jac_gamma = gamma_tape_1.gradient(grad_gamma,all_pts)
-        lap_gamma = tf.math.reduce_sum(jac_gamma,axis = 2)
+        lap_gamma = tf.math.reduce_sum(jac_gamma,axis = 1)
         
         term_vel_HJB = tf.math.scalar_mul(self.mu*self.sigma**2,tf.reduce_sum(tf.multiply(self.s, grad_phi),1))
         term_lap_HJB = tf.math.scalar_mul((self.mu*self.sigma**4)/2,lap_phi)
