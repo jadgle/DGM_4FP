@@ -1,4 +1,5 @@
 .ipynb_checkpoints/*
 __pycache__/*
+IC/*
 *.ipynb
 config.json
