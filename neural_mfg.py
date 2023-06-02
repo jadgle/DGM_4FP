@@ -212,7 +212,7 @@ class dgm_net:
         
         res_obstacle = tf.reduce_mean((self.phi_theta(self.X_in))**2) + tf.reduce_mean((self.gamma_theta(self.X_in))**2)
        
-        res_total_mass = tf.reduce_mean((gamma*phi*(2*self.lx)*(2*self.ly)-self.total_mass)**2) 
+        res_total_mass = (tf.reduce_mean(phi*gamma)*(2*self.lx)*(2*self.ly)-self.total_mass)**2
        
         print('      {:10.3e}       {:10.3e}       {:10.3e}       {:10.3e}       {:10.3e}       {:10.3e}'.format(res_HJB,res_KFP,res_b_phi,res_b_gamma,res_obstacle,res_total_mass))
     
