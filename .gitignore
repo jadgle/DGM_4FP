@@ -1,5 +1,6 @@
 run.py
 *.slur
+*.out
 /.ipynb_checkpoints
 /__pycache__
 /IC
