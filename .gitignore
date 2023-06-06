@@ -1,3 +1,4 @@
+run.py
 *.slur
 /.ipynb_checkpoints
 /__pycache__
