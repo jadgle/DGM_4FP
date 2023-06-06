@@ -82,6 +82,8 @@ class dgm_net:
                                 var['dgm_params']['activation'])
         
         self.X_b, self.X_in, self.X_out = self.sample_room()
+        
+        self.all_pts = tf.constant(tf.concat([self.X_out,self.X_in,self.X_b],axis = 0))
     
         return
     
@@ -107,16 +109,13 @@ class dgm_net:
         
         U0 = np.zeros(shape = (self.N_b + self.N_in,1))
         
-        for i in range(U0.shape[0]):
+        U0[np.sqrt(all_pts[:,0]**2 + all_pts[:,1]**2) < self.R] = self.pot
         
-            if tf.less_equal(tf.norm(all_pts[i],'euclidean'),self.R): # for points in the cilinder
-                U0[i] = self.pot   # we have higher cost
+        U0 = tf.constant(U0, dtype=self.DTYPE)
         
-        U0 = tf.convert_to_tensor(U0, dtype=self.DTYPE)
+        mean_field = tf.math.scalar_mul(self.g,tf.multiply(phi,gamma))
         
-        m = tf.multiply(phi,gamma)
-        
-        return tf.reduce_sum(tf.math.scalar_mul(self.g,m) + U0,axis = 1) # formula for the potential from reference  
+        return mean_field + U0 # formula for the potential from reference  
       
     def sample_room(self):
         '''
@@ -195,22 +194,14 @@ class dgm_net:
         jac_gamma = gamma_tape_1.gradient(grad_gamma,all_pts)
         lap_gamma = tf.math.reduce_sum(jac_gamma,axis = 1)
         
-        term_vel_HJB = tf.math.scalar_mul(self.mu*self.sigma**2,tf.reduce_sum(tf.multiply(self.s, grad_phi),1))
-        term_lap_HJB = tf.math.scalar_mul((self.mu*self.sigma**4)/2,lap_phi)
-        term_pot_HJB = tf.multiply(self.V(phi,gamma),phi[:,0])
-        
-        res_HJB = tf.reduce_mean((tf.math.scalar_mul(self.l,phi[:,0]) + term_pot_HJB +  term_lap_HJB - term_vel_HJB)**2)
-        
-        term_vel_KFP = tf.math.scalar_mul(self.mu*self.sigma**2,tf.reduce_sum(tf.multiply(self.s, grad_gamma),1))
-        term_lap_KFP = tf.math.scalar_mul((self.mu*self.sigma**4)/2,lap_gamma)
-        term_pot_KFP = tf.multiply(self.V(phi,gamma),gamma[:,0])
-       
-        res_KFP = tf.reduce_mean((tf.math.scalar_mul(self.l,gamma[:,0]) + term_pot_KFP +  term_lap_KFP + term_vel_KFP)**2)
+        res_HJB = tf.reduce_mean(self.l*phi +self.V(phi,gamma)*phi + 0.5*self.mu*self.sigma**4*lap_phi - self.mu*self.sigma**2*tf.reduce_sum(self.s*grad_phi,axis = 1))**2
+    
+        res_KFP = tf.reduce_mean(self.l*gamma +self.V(phi,gamma)*gamma + 0.5*self.mu*self.sigma**4*lap_gamma + self.mu*self.sigma**2*tf.reduce_sum(self.s*grad_gamma,axis = 1))**2
         
         res_b_phi = tf.reduce_mean((tf.sqrt(self.m_0) - self.phi_theta(self.X_b))**2)
         res_b_gamma = tf.reduce_mean((tf.sqrt(self.m_0) - self.gamma_theta(self.X_b))**2)
         
-        res_obstacle = tf.reduce_mean((self.phi_theta(self.X_in))**2) + tf.reduce_mean((self.gamma_theta(self.X_in))**2)
+        res_obstacle = tf.reduce_mean(self.phi_theta(self.X_in)**2) + tf.reduce_mean(self.gamma_theta(self.X_in)**2)
        
         res_total_mass = (tf.reduce_mean(phi*gamma)*(2*self.lx)*(2*self.ly)-self.total_mass)**2
        
@@ -262,9 +253,9 @@ class dgm_net:
         for step in range(1,self.training_steps + 1):
             print('{:6d}'.format(step),end="")
             # Compute loss for phi and gamma
-            phi_loss = self.train_step(self.phi_theta)
+            self.train_step(self.phi_theta)
             print('      ',end="")
-            gamma_loss = self.train_step(self.gamma_theta)
+            self.train_step(self.gamma_theta)
     
     def warmstart_step(self,f_theta,f_IC,points_IC):
         '''
