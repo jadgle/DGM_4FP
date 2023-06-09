@@ -372,7 +372,7 @@ class dgm_net:
                 print('WS step {:5d}, loss phi={:10.3e}, loss gamma={:10.3e}'.format(step, phi_loss,gamma_loss))
                 
     
-    def warmstart_new(self):
+    def warmstart_new(self,verbose=True):
        
         for step in range(self.training_steps + 1):
             
@@ -381,7 +381,7 @@ class dgm_net:
             phi_loss = self.warmstart_step_new(self.phi_theta)
             gamma_loss = self.warmstart_step_new(self.gamma_theta)
            
-            if step % 100 == 0:
+            if verbose:
                 print('WS step {:5d}, loss phi={:10.3e}, loss gamma={:10.3e}'.format(step, phi_loss,gamma_loss))
      
     def draw(self):
