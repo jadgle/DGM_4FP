@@ -373,8 +373,12 @@ class dgm_net:
                 
     
     def warmstart_new(self,verbose=True):
+        
+        phi_loss = 1
+        gamma_loss = 1
+        step = 0
        
-        for step in range(self.training_steps + 1):
+        while np.maximum(phi_loss,gamma_loss) > 10e-3:
             
             # Compute loss for phi and gamma
             
@@ -383,6 +387,9 @@ class dgm_net:
            
             if verbose:
                 print('WS step {:5d}, loss phi={:10.3e}, loss gamma={:10.3e}'.format(step, phi_loss,gamma_loss))
+            
+            step +=1
+        
      
     def draw(self):
         '''
