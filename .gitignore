@@ -4,5 +4,6 @@ run.py
 /.ipynb_checkpoints
 /__pycache__
 /IC
+/trainings
 *.ipynb
 config.json
