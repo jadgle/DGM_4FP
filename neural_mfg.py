@@ -322,7 +322,21 @@ class dgm_net:
         
         return f_loss
     
-    def warmstart_step_new(self,f_theta):
+    def warmstart_step_simple(self,f_theta):
+        '''
+        One step of warmstart with simple IC
+
+        Parameters
+        ----------
+        f_theta : dgmnet
+            The net to which apply one step of warmstart.
+
+        Returns
+        -------
+        f_loss : tf.tensor
+            The value of the loss after one step of ws.
+
+        '''
         
         all_pts = tf.concat([self.X_out,self.X_in,self.X_b],axis = 0)
         
@@ -360,8 +374,11 @@ class dgm_net:
         None.
 
         '''
-        
-        for step in range(self.training_steps + 1):
+        phi_loss = 1
+        gamma_loss = 1
+        step = 0
+       
+        while np.maximum(phi_loss,gamma_loss) > 10e-3:
             
             # Compute loss for phi and gamma
             
@@ -371,8 +388,22 @@ class dgm_net:
             if step % 100 == 0:
                 print('WS step {:5d}, loss phi={:10.3e}, loss gamma={:10.3e}'.format(step, phi_loss,gamma_loss))
                 
+            step +=1
     
     def warmstart_new(self,verbose=True):
+        '''
+        Simple warmstart towards sqrt(m_0) condition.        
+
+        Parameters
+        ----------
+        verbose : Bool, optional
+            Shows info bout the simple warmstart. The default is True.
+
+        Returns
+        -------
+        None.
+
+        '''
         
         phi_loss = 1
         gamma_loss = 1
@@ -413,7 +444,18 @@ class dgm_net:
         plt.show()     
         
     def save(self):
+        '''
+        Save into 'trainings' directory some info about the training. 
 
+        Returns
+        -------
+        None.
+
+        '''
+        
+        if not os.path.exists('./trainings'):
+            os.mkdir('./trainings')
+            
         current_time = datetime.datetime.now()
         dirname = current_time.strftime("%B %d, %Y %H-%M-%S")
         
