@@ -9,7 +9,10 @@ import numpy as np
 import random
 import os
 import json
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import datetime
 
 
 class dgm_net:
@@ -28,6 +31,7 @@ class dgm_net:
             var = json.loads(f.read())
         
         self.DTYPE = 'float32'
+        self.var = var
        
         # MFG parameters 
         self.xi    = var['mfg_params']['xi']
@@ -75,13 +79,17 @@ class dgm_net:
                                 var['dgm_params']['RNN_layers'],
                                 var['dgm_params']['FNN_layers'], 2,
                                 var['dgm_params']['activation'])
-        
+             
         self.gamma_theta = DGMNet(var['dgm_params']['nodes_per_layer'],
                                 var['dgm_params']['RNN_layers'],
                                 var['dgm_params']['FNN_layers'], 2,
                                 var['dgm_params']['activation'])
         
         self.X_b, self.X_in, self.X_out = self.sample_room()
+        
+        self.all_pts = tf.constant(tf.concat([self.X_out,self.X_in,self.X_b],axis = 0))
+        
+        self.history = []
     
         return
     
@@ -107,16 +115,13 @@ class dgm_net:
         
         U0 = np.zeros(shape = (self.N_b + self.N_in,1))
         
-        for i in range(U0.shape[0]):
+        U0[np.sqrt(all_pts[:,0]**2 + all_pts[:,1]**2) < self.R] = self.pot
         
-            if tf.less_equal(tf.norm(all_pts[i],'euclidean'),self.R): # for points in the cilinder
-                U0[i] = self.pot   # we have higher cost
+        U0 = tf.constant(U0, dtype=self.DTYPE)
         
-        U0 = tf.convert_to_tensor(U0, dtype=self.DTYPE)
+        mean_field = tf.math.scalar_mul(self.g,tf.multiply(phi,gamma))
         
-        m = tf.multiply(phi,gamma)
-        
-        return tf.reduce_sum(tf.math.scalar_mul(self.g,m) + U0,axis = 1) # formula for the potential from reference  
+        return mean_field + U0 # formula for the potential from reference  
       
     def sample_room(self):
         '''
@@ -158,14 +163,14 @@ class dgm_net:
 
         return pd.DataFrame(X_b.numpy()), pd.DataFrame(X_in.numpy()), pd.DataFrame(X_out.numpy())
  
-    def get_loss(self):
+    def get_loss(self,verbose):
         '''
         Computes loss function by calculating the residuals.
 
         Returns
         -------
         tensorflow.tensor
-            Loss function sum of the different residuals.
+            Loss function sum of the different residuals. The default is True.
 
         '''
         
@@ -195,30 +200,25 @@ class dgm_net:
         jac_gamma = gamma_tape_1.gradient(grad_gamma,all_pts)
         lap_gamma = tf.math.reduce_sum(jac_gamma,axis = 1)
         
-        term_vel_HJB = tf.math.scalar_mul(self.mu*self.sigma**2,tf.reduce_sum(tf.multiply(self.s, grad_phi),1))
-        term_lap_HJB = tf.math.scalar_mul((self.mu*self.sigma**4)/2,lap_phi)
-        term_pot_HJB = tf.multiply(self.V(phi,gamma),phi[:,0])
-        
-        res_HJB = tf.reduce_mean((tf.math.scalar_mul(self.l,phi[:,0]) + term_pot_HJB +  term_lap_HJB - term_vel_HJB)**2)
-        
-        term_vel_KFP = tf.math.scalar_mul(self.mu*self.sigma**2,tf.reduce_sum(tf.multiply(self.s, grad_gamma),1))
-        term_lap_KFP = tf.math.scalar_mul((self.mu*self.sigma**4)/2,lap_gamma)
-        term_pot_KFP = tf.multiply(self.V(phi,gamma),gamma[:,0])
-       
-        res_KFP = tf.reduce_mean((tf.math.scalar_mul(self.l,gamma[:,0]) + term_pot_KFP +  term_lap_KFP + term_vel_KFP)**2)
+        res_HJB = tf.reduce_mean(self.l*phi +self.V(phi,gamma)*phi + 0.5*self.mu*self.sigma**4*lap_phi - self.mu*self.sigma**2*tf.reduce_sum(self.s*grad_phi,axis = 1))**2
+    
+        res_KFP = tf.reduce_mean(self.l*gamma +self.V(phi,gamma)*gamma + 0.5*self.mu*self.sigma**4*lap_gamma + self.mu*self.sigma**2*tf.reduce_sum(self.s*grad_gamma,axis = 1))**2
         
         res_b_phi = tf.reduce_mean((tf.sqrt(self.m_0) - self.phi_theta(self.X_b))**2)
         res_b_gamma = tf.reduce_mean((tf.sqrt(self.m_0) - self.gamma_theta(self.X_b))**2)
         
-        res_obstacle = tf.reduce_mean((self.phi_theta(self.X_in))**2) + tf.reduce_mean((self.gamma_theta(self.X_in))**2)
+        res_obstacle = tf.reduce_mean(self.phi_theta(self.X_in)**2) + tf.reduce_mean(self.gamma_theta(self.X_in)**2)
        
         res_total_mass = (tf.reduce_mean(phi*gamma)*(2*self.lx)*(2*self.ly)-self.total_mass)**2
        
-        print('      {:10.3e}       {:10.3e}       {:10.3e}       {:10.3e}       {:10.3e}       {:10.3e}'.format(res_HJB,res_KFP,res_b_phi,res_b_gamma,res_obstacle,res_total_mass))
-    
+        if verbose: 
+            print('      {:10.3e}       {:10.3e}       {:10.3e}       {:10.3e}       {:10.3e}       {:10.3e}'.format(res_HJB,res_KFP,res_b_phi,res_b_gamma,res_obstacle,res_total_mass))
+        
+        self.history.append([res_HJB.numpy(),res_KFP.numpy(),res_b_phi.numpy(),res_b_gamma.numpy(),res_obstacle.numpy(),res_total_mass.numpy()])
+        
         return res_HJB + res_KFP + res_b_gamma + res_b_phi + res_obstacle + res_total_mass
       
-    def train_step(self,f_theta):
+    def train_step(self,f_theta,verbose):
         '''
         Applies one training to the NN in input
 
@@ -240,16 +240,21 @@ class dgm_net:
             
             f_vars = f_theta.trainable_weights
             f_tape.watch(f_vars)
-            f_loss = self.get_loss()
+            f_loss = self.get_loss(verbose)
             f_grad = f_tape.gradient(f_loss,f_vars)
         
         optimizer.apply_gradients(zip(f_grad, f_vars))
         
         return f_loss
     
-    def train(self):
+    def train(self,verbose = True):
         '''
-        Repetetively applies self.training_steps. 
+        Applies self.training_steps. 
+        
+        Parameters
+        ----------
+        verbose : Bool
+            When true prints the value of each residual at each iteration.
 
         Returns
         -------
@@ -257,14 +262,24 @@ class dgm_net:
 
         '''
         
-        print(' #iter       res_HJB          res_KFP          res_b_phi        res_b_gamma      res_obstacle     res_total_mass')
-        print('-----------------------------------------------------------------------------------------------------------------')
+        if verbose:
+            print(' #iter       res_HJB          res_KFP          res_b_phi        res_b_gamma      res_obstacle     res_total_mass')
+            print('-----------------------------------------------------------------------------------------------------------------')
+        
         for step in range(1,self.training_steps + 1):
-            print('{:6d}'.format(step),end="")
+            
+            if verbose:
+                print('{:6d}'.format(step),end="")
+            
+            # Train phi 
+            self.train_step(self.phi_theta,verbose)
+            
+            if verbose:
+                print('      ',end="")
+            
             # Compute loss for phi and gamma
-            phi_loss = self.train_step(self.phi_theta)
-            print('      ',end="")
-            gamma_loss = self.train_step(self.gamma_theta)
+            
+            self.train_step(self.gamma_theta,verbose)
     
     def warmstart_step(self,f_theta,f_IC,points_IC):
         '''
@@ -306,6 +321,40 @@ class dgm_net:
         optimizer.apply_gradients(zip(f_grad, f_vars))
         
         return f_loss
+    
+    def warmstart_step_simple(self,f_theta):
+        '''
+        One step of warmstart with simple IC
+
+        Parameters
+        ----------
+        f_theta : dgmnet
+            The net to which apply one step of warmstart.
+
+        Returns
+        -------
+        f_loss : tf.tensor
+            The value of the loss after one step of ws.
+
+        '''
+        
+        all_pts = tf.concat([self.X_out,self.X_in,self.X_b],axis = 0)
+        
+        optimizer = tf.optimizers.Adam(learning_rate = self.learning_rate)
+       
+        # Compute gradient wrt variables for phi and gamma
+        
+        with tf.GradientTape() as f_tape:
+            
+            f_vars = f_theta.trainable_weights
+            f_tape.watch(f_vars)
+            f_prediction = f_theta(all_pts)
+            f_loss = tf.reduce_mean((f_prediction - tf.sqrt(self.m_0))**2)
+            f_grad = f_tape.gradient(f_loss,f_vars)
+            
+        optimizer.apply_gradients(zip(f_grad, f_vars))
+        
+        return f_loss
  
     def warmstart(self,phi_IC,gamma_IC,points_IC):
         '''
@@ -325,8 +374,11 @@ class dgm_net:
         None.
 
         '''
-        
-        for step in range(self.training_steps + 1):
+        phi_loss = 1
+        gamma_loss = 1
+        step = 0
+       
+        while np.maximum(phi_loss,gamma_loss) > 10e-3:
             
             # Compute loss for phi and gamma
             
@@ -335,6 +387,40 @@ class dgm_net:
            
             if step % 100 == 0:
                 print('WS step {:5d}, loss phi={:10.3e}, loss gamma={:10.3e}'.format(step, phi_loss,gamma_loss))
+                
+            step +=1
+    
+    def warmstart_simple(self,verbose=True):
+        '''
+        Simple warmstart towards sqrt(m_0) condition.        
+
+        Parameters
+        ----------
+        verbose : Bool, optional
+            Shows info bout the simple warmstart. The default is True.
+
+        Returns
+        -------
+        None.
+
+        '''
+        
+        phi_loss = 1
+        gamma_loss = 1
+        step = 0
+       
+        while np.maximum(phi_loss,gamma_loss) > 10e-3:
+            
+            # Compute loss for phi and gamma
+            
+            phi_loss = self.warmstart_step_simple(self.phi_theta)
+            gamma_loss = self.warmstart_step_simple(self.gamma_theta)
+           
+            if verbose:
+                print('WS step {:5d}, loss phi={:10.3e}, loss gamma={:10.3e}'.format(step, phi_loss,gamma_loss))
+            
+            step +=1
+        
      
     def draw(self):
         '''
@@ -356,3 +442,61 @@ class dgm_net:
         plt.colorbar()
         plt.clim(vmin = 0)
         plt.show()     
+        
+    def save(self):
+        '''
+        Save into 'trainings' directory some info about the training. 
+
+        Returns
+        -------
+        None.
+
+        '''
+        
+        if not os.path.exists('./trainings'):
+            os.mkdir('./trainings')
+            
+        current_time = datetime.datetime.now()
+        dirname = current_time.strftime("%B %d, %Y %H-%M-%S")
+        
+        if not os.path.exists('./trainings/' + dirname):
+            os.mkdir('./trainings/' + dirname)
+        
+        labels = ['res_HJB', 'res_KFP', 'res_b_phi', 'res_b_gamma', 'res_obstacle', 'res_total_mass']
+        history = np.array(self.history)
+        fig, ax = plt.subplots(nrows = 2,ncols=3,figsize = (15,10))
+
+        for col in range(history.shape[1]):
+    
+            ax[col//3,col%3].plot(history[:,col])
+            ax[col//3,col%3].set_title(labels[col])
+    
+        plt.savefig('./trainings/' + dirname + '/residuals')
+        
+        training = {}
+
+        training['config'] = self.var
+        training['phi_theta'] = self.phi_theta(self.all_pts).numpy().tolist()
+        training['gamma_theta'] = self.gamma_theta(self.all_pts).numpy().tolist()
+        training['points'] = self.all_pts.numpy().tolist()
+        
+        # Serializing json
+        json_object = json.dumps(training, indent=4)
+         
+        # Writing to sample.json
+        with open("./trainings/" + dirname + "/net.json", "w") as outfile:
+            outfile.write(json_object)
+            
+        all_pts = tf.concat([self.X_out,self.X_in,self.X_b],axis = 0)
+        
+        m = self.gamma_theta(all_pts)*self.phi_theta(all_pts)
+         
+        plt.figure(figsize=(8,8))
+        plt.scatter(all_pts.numpy()[:,0], all_pts.numpy()[:,1], c=m, cmap='hot_r')
+        plt.xlabel('$x$')
+        plt.ylabel('$y$')
+        plt.colorbar()
+        plt.clim(vmin = 0)
+        
+        plt.savefig('./trainings/' + dirname + '/density')
+        
