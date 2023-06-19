@@ -390,7 +390,7 @@ class dgm_net:
                 
             step +=1
     
-    def warmstart_new(self,verbose=True):
+    def warmstart_simple(self,verbose=True):
         '''
         Simple warmstart towards sqrt(m_0) condition.        
 
@@ -413,8 +413,8 @@ class dgm_net:
             
             # Compute loss for phi and gamma
             
-            phi_loss = self.warmstart_step_new(self.phi_theta)
-            gamma_loss = self.warmstart_step_new(self.gamma_theta)
+            phi_loss = self.warmstart_step_simple(self.phi_theta)
+            gamma_loss = self.warmstart_step_simple(self.gamma_theta)
            
             if verbose:
                 print('WS step {:5d}, loss phi={:10.3e}, loss gamma={:10.3e}'.format(step, phi_loss,gamma_loss))
