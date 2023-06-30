@@ -43,12 +43,14 @@ class dgm_net:
         self.l     = -self.g*self.m_0
         self.R     = 0.37
         self.s     =  tf.constant([0, -var['room']['s']],  dtype=self.DTYPE, shape=(1, 2))
-        self.pot     = var['mfg_params']['V']
+        self.pot   = var['mfg_params']['V']
         
         # NN parameters
-        self.training_steps = var['dgm_params']['training_steps']
-        self.learning_rate = var['dgm_params']['learning_rate']
-        
+        self.training_steps  = var['dgm_params']['training_steps']
+        self.learning_rate   = var['dgm_params']['learning_rate']
+        self.M               = var['dgm_params']['M']
+        self.resampling_step = var['dgm_params']['resampling_step']
+
         # Room definition 
         self.lx   = var['room']['lx']
         self.ly   = var['room']['ly']
@@ -162,10 +164,55 @@ class dgm_net:
         X_b = tf.concat([x_b, y_b], axis=1)
 
         return pd.DataFrame(X_b.numpy()), pd.DataFrame(X_in.numpy()), pd.DataFrame(X_out.numpy())
- 
-    def get_loss(self,verbose):
+    
+    def resample(self):
         '''
-        Computes loss function by calculating the residuals.
+        Residual-based adaptive refinement method with greed (RAR-G).
+        
+        Returns
+        ------- 
+        void - it changes the attributes X_b, X_in, X_out of self
+
+        '''
+        X_b, X_in, X_out = self.sample_room()
+        #all_pts = (pd.concat([X_out,X_in,X_b],axis = 0))
+        n_b = self.N_b
+        n_in = X_in.shape[0]
+        n_out = X_out.shape[0]
+        
+        res_HJB, res_KFP, _, _, _, _ = self.get_loss_terms(0,X_out,X_in,X_b)
+        
+        PDEs_residual = pd.DataFrame(res_HJB.numpy() + res_KFP.numpy())
+        PDEs_residual.sort_values(by=PDEs_residual.columns[1])
+        
+        X_b_new     = [] 
+        X_in_new    = []
+        X_out_new   = []
+        
+        for i in range(self.M):
+            ind = PDEs_residual.index.values[i]
+            if  ind < n_out:
+                X_out_new.append(X_out.iloc[ind])
+            elif ind < n_in:
+                X_in_new.append(X_in.iloc[ind-n_out])
+            else:
+                X_b_new.append(X_b.iloc[ind-n_out-n_in])
+                
+        X_out_new = pd.DataFrame(X_out_new)
+        X_in_new = pd.DataFrame(X_in_new)
+        X_b_new = pd.DataFrame(X_b_new)
+        
+        self.X_out = pd.concat([self.X_out, X_out_new], ignore_index=True)
+        self.X_in  = pd.concat([self.X_in, X_in_new], ignore_index=True)
+        self.X_b   = pd.concat([self.X_b, X_b_new], ignore_index=True)
+        
+        self.N_in  = self.X_in.shape[0] + self.X_out.shape[0]
+        self.N_b   = self.X_b.shape[0]
+        return
+    
+    def get_L2_loss(self,verbose):
+        '''
+        Computes L2 loss function by calculating the L2 norm of the residuals.
 
         Returns
         -------
@@ -173,8 +220,36 @@ class dgm_net:
             Loss function sum of the different residuals. The default is True.
 
         '''
+        res_HJB, res_KFP, res_b_gamma, res_b_phi, res_obstacle, res_total_mass = self.get_loss_terms(verbose,self.X_out,self.X_in,self.X_b)
         
-        all_pts = tf.Variable(tf.concat([self.X_out,self.X_in,self.X_b],axis = 0))
+        L2_HJB = tf.reduce_mean(res_HJB)**2    
+        L2_KFP = tf.reduce_mean(res_KFP)**2
+        
+        L2_b_gamma = tf.reduce_mean(res_b_gamma)**2
+        L2_b_phi = tf.reduce_mean(res_b_phi)**2
+       
+        L2_obstacle = tf.reduce_mean(res_obstacle)**2 
+       
+        if verbose: 
+            print('      {:10.3e}       {:10.3e}       {:10.3e}       {:10.3e}       {:10.3e}       {:10.3e}'.format(L2_HJB,L2_KFP,L2_b_phi,L2_b_gamma,L2_obstacle,res_total_mass))
+        
+        self.history.append([L2_HJB.numpy(),L2_KFP.numpy(),L2_b_phi.numpy(),L2_b_gamma.numpy(),L2_obstacle.numpy(),res_total_mass.numpy()])
+        
+        return L2_HJB + L2_KFP + L2_b_gamma + L2_b_phi + L2_obstacle + res_total_mass
+        
+ 
+    def get_loss_terms(self,verbose,X_out,X_in,X_b):
+        '''
+        Computes the terms of loss function by calculating the residuals at each point.
+
+        Returns
+        -------
+        tensorflow.tensors
+            Loss function terms of the different residuals. The default is True.
+
+        '''
+        
+        all_pts = tf.Variable(tf.concat([X_out,X_in,X_b],axis = 0))
         
         # Compute gradient and laplacian for Phi
         
@@ -200,23 +275,20 @@ class dgm_net:
         jac_gamma = gamma_tape_1.gradient(grad_gamma,all_pts)
         lap_gamma = tf.math.reduce_sum(jac_gamma,axis = 1)
         
-        res_HJB = tf.reduce_mean(self.l*phi +self.V(phi,gamma)*phi + 0.5*self.mu*self.sigma**4*lap_phi - self.mu*self.sigma**2*tf.reduce_sum(self.s*grad_phi,axis = 1))**2
+        # Compute terms of the loss function
+        
+        res_HJB = self.l*phi +self.V(phi,gamma)*phi + 0.5*self.mu*self.sigma**4*lap_phi - self.mu*self.sigma**2*tf.reduce_sum(self.s*grad_phi,axis = 1)
     
-        res_KFP = tf.reduce_mean(self.l*gamma +self.V(phi,gamma)*gamma + 0.5*self.mu*self.sigma**4*lap_gamma + self.mu*self.sigma**2*tf.reduce_sum(self.s*grad_gamma,axis = 1))**2
+        res_KFP = self.l*gamma +self.V(phi,gamma)*gamma + 0.5*self.mu*self.sigma**4*lap_gamma + self.mu*self.sigma**2*tf.reduce_sum(self.s*grad_gamma,axis = 1)
         
-        res_b_phi = tf.reduce_mean((tf.sqrt(self.m_0) - self.phi_theta(self.X_b))**2)
-        res_b_gamma = tf.reduce_mean((tf.sqrt(self.m_0) - self.gamma_theta(self.X_b))**2)
+        res_b_phi = (tf.sqrt(self.m_0) - self.phi_theta(X_b))
+        res_b_gamma = (tf.sqrt(self.m_0) - self.gamma_theta(X_b))
         
-        res_obstacle = tf.reduce_mean(self.phi_theta(self.X_in)**2) + tf.reduce_mean(self.gamma_theta(self.X_in)**2)
+        res_obstacle = self.phi_theta(X_in) +  self.gamma_theta(X_in)
        
         res_total_mass = (tf.reduce_mean(phi*gamma)*(2*self.lx)*(2*self.ly)-self.total_mass)**2
        
-        if verbose: 
-            print('      {:10.3e}       {:10.3e}       {:10.3e}       {:10.3e}       {:10.3e}       {:10.3e}'.format(res_HJB,res_KFP,res_b_phi,res_b_gamma,res_obstacle,res_total_mass))
-        
-        self.history.append([res_HJB.numpy(),res_KFP.numpy(),res_b_phi.numpy(),res_b_gamma.numpy(),res_obstacle.numpy(),res_total_mass.numpy()])
-        
-        return res_HJB + res_KFP + res_b_gamma + res_b_phi + res_obstacle + res_total_mass
+        return res_HJB, res_KFP, res_b_gamma, res_b_phi, res_obstacle, res_total_mass
       
     def train_step(self,f_theta,verbose):
         '''
@@ -240,7 +312,7 @@ class dgm_net:
             
             f_vars = f_theta.trainable_weights
             f_tape.watch(f_vars)
-            f_loss = self.get_loss(verbose)
+            f_loss = self.get_L2_loss(verbose)
             f_grad = f_tape.gradient(f_loss,f_vars)
         
         optimizer.apply_gradients(zip(f_grad, f_vars))
@@ -265,7 +337,7 @@ class dgm_net:
         if verbose:
             print(' #iter       res_HJB          res_KFP          res_b_phi        res_b_gamma      res_obstacle     res_total_mass')
             print('-----------------------------------------------------------------------------------------------------------------')
-        
+        # standard training (without resampling)
         for step in range(1,self.training_steps + 1):
             
             if verbose:
@@ -276,7 +348,28 @@ class dgm_net:
             
             if verbose:
                 print('      ',end="")
+                
+            # Compute loss for phi and gamma
             
+            self.train_step(self.gamma_theta,verbose)
+            
+        # training without resampling
+        for step in range(1,self.training_steps + 1):
+            
+            if verbose:
+                print('{:6d}'.format(step),end="")
+            
+            # Train phi 
+            self.train_step(self.phi_theta,verbose)
+            
+            if verbose:
+                print('      ',end="")
+                
+            # every m=resampling_step, we refine the dataset by RAR-G with M new points
+            
+            if step % self.resampling_step == 0:
+                self.resample()
+                
             # Compute loss for phi and gamma
             
             self.train_step(self.gamma_theta,verbose)
