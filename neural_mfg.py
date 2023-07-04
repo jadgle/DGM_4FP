@@ -183,7 +183,7 @@ class dgm_net:
         res_HJB, res_KFP, _, _, _, _ = self.get_loss_terms(0,X_out,X_in,X_b)
         
         PDEs_residual = pd.DataFrame(res_HJB.numpy() + res_KFP.numpy())
-        PDEs_residual.sort_values(by=PDEs_residual.columns[1])
+        PDEs_residual.sort_values(by=PDEs_residual.columns[1], ascending=False)
         
         X_b_new     = [] 
         X_in_new    = []
