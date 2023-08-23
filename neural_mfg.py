@@ -10,7 +10,7 @@ import random
 import os
 import json
 import matplotlib
-matplotlib.use('Agg')
+#matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import datetime
 
@@ -233,9 +233,10 @@ class dgm_net:
         if verbose: 
             print('      {:10.3e}       {:10.3e}       {:10.3e}       {:10.3e}       {:10.3e}       {:10.3e}'.format(L2_HJB,L2_KFP,L2_b_phi,L2_b_gamma,L2_obstacle,res_total_mass))
         
-        self.history.append([L2_HJB.numpy(),L2_KFP.numpy(),L2_b_phi.numpy(),L2_b_gamma.numpy(),L2_obstacle.numpy(),res_total_mass.numpy()])
+        L_tot = L2_HJB + L2_KFP + L2_b_gamma + L2_b_phi + L2_obstacle + res_total_mass
+        self.history.append([L_tot.numpy(),L2_HJB.numpy(),L2_KFP.numpy(),L2_b_phi.numpy(),L2_b_gamma.numpy(),L2_obstacle.numpy(),res_total_mass.numpy()])
         
-        return L2_HJB + L2_KFP + L2_b_gamma + L2_b_phi + L2_obstacle + res_total_mass
+        return L_tot
         
  
     def get_loss_terms(self,verbose,X_out,X_in,X_b):
@@ -290,7 +291,7 @@ class dgm_net:
        
         return res_HJB, res_KFP, res_b_gamma, res_b_phi, res_obstacle, res_total_mass
       
-    def train_step(self,f_theta,verbose):
+    def train_step(self,verbose):
         '''
         Applies one training to the NN in input
 
@@ -306,11 +307,13 @@ class dgm_net:
 
         '''
         
+        gamma_theta = self.gamma_theta
+        phi_theta   = self.phi_theta
         optimizer = tf.optimizers.Adam(learning_rate = self.learning_rate)
         
         with tf.GradientTape() as f_tape:
             
-            f_vars = f_theta.trainable_weights
+            f_vars = gamma_theta.trainable_weights + gamma_theta.trainable_weights
             f_tape.watch(f_vars)
             f_loss = self.get_L2_loss(verbose)
             f_grad = f_tape.gradient(f_loss,f_vars)
@@ -333,46 +336,37 @@ class dgm_net:
         None.
 
         '''
-        
+
         if verbose:
             print(' #iter       res_HJB          res_KFP          res_b_phi        res_b_gamma      res_obstacle     res_total_mass')
             print('-----------------------------------------------------------------------------------------------------------------')
-        # standard training (without resampling)
-        for step in range(1,self.training_steps + 1):
+            # standard training (without resampling)
             
-            if verbose:
-                print('{:6d}'.format(step),end="")
+            for step in range(1,self.training_steps + 1):
+
+                if step % 100 == 0:
+                    print('{:6d}'.format(step),end="")
+                    # Train phi 
+                    self.train_step(True)
+                    print('      ',end="")
+                else:
+                    self.train_step(False)
+
+            # training with resampling
+            for step in range(1,self.training_steps + 1):
+
+                if step % 100 == 0:
+                    print('{:6d}'.format(step),end="")
+                    # Train phi 
+                    self.train_step(True)
+                    print('      ',end="")
+                else:
+                    self.train_step(False)
+
+                # every m=resampling_step, we refine the dataset by RAR-G with M new points
+                if step % self.resampling_step == 0:
+                    self.resample()
             
-            # Train phi 
-            self.train_step(self.phi_theta,verbose)
-            
-            if verbose:
-                print('      ',end="")
-                
-            # Compute loss for phi and gamma
-            
-            self.train_step(self.gamma_theta,verbose)
-            
-        # training without resampling
-        for step in range(1,self.training_steps + 1):
-            
-            if verbose:
-                print('{:6d}'.format(step),end="")
-            
-            # Train phi 
-            self.train_step(self.phi_theta,verbose)
-            
-            if verbose:
-                print('      ',end="")
-                
-            # every m=resampling_step, we refine the dataset by RAR-G with M new points
-            
-            if step % self.resampling_step == 0:
-                self.resample()
-                
-            # Compute loss for phi and gamma
-            
-            self.train_step(self.gamma_theta,verbose)
     
     def warmstart_step(self,f_theta,f_IC,points_IC):
         '''
@@ -509,7 +503,7 @@ class dgm_net:
             phi_loss = self.warmstart_step_simple(self.phi_theta)
             gamma_loss = self.warmstart_step_simple(self.gamma_theta)
            
-            if verbose:
+            if step % 100 == 0:
                 print('WS step {:5d}, loss phi={:10.3e}, loss gamma={:10.3e}'.format(step, phi_loss,gamma_loss))
             
             step +=1
