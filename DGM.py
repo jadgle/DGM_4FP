@@ -195,7 +195,7 @@ class DGMNet(tf.keras.Model):
 
         # define initial layer as fully connected
         # NOTE: to account for time inputs we use input_dim+1 as the input dimensionality
-        self.initial_layer = DenseLayer(layer_width, input_dim, activation="relu") #activation=None
+        self.initial_layer = DenseLayer(layer_width, input_dim, activation=None) #activation=None
 
         # define intermediate LSTM layers
         self.FNN_layers = FNN_layers
@@ -210,7 +210,7 @@ class DGMNet(tf.keras.Model):
             self.DenseLayerList.append(DenseLayer(layer_width, layer_width, activation = sigma))     
 
         # define final layer as fully connected with a single output (function value)
-        self.final_layer = DenseLayer(1, layer_width, activation=final_trans)
+        self.final_layer = DenseLayer(1, layer_width, activation="relu")
 
     # main function to be called
     def call(self, x):
