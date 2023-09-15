@@ -382,16 +382,16 @@ class dgm_net:
             print('-----------------------------------------------------------------------------------------------------------------------')
             # standard training (without resampling)
             print('    ',end="")
-            
-            for step in range(1,self.training_steps + 1):
+            if !resampling:
+                for step in range(1,self.training_steps + 1):
 
-                if step % 10 == 0:
-                    print('{:6d}'.format(step),end="")
-                    # Train phi 
-                    self.train_step(True)
-                    print('    ',end="")
-                else:
-                    self.train_step(False)
+                    if step % 10 == 0:
+                        print('{:6d}'.format(step),end="")
+                        # Train phi 
+                        self.train_step(True)
+                        print('    ',end="")
+                    else:
+                        self.train_step(False)
             if resampling:
                 # training with resampling
                 for step in range(1,self.training_steps + 1):
@@ -542,7 +542,6 @@ class dgm_net:
         while np.maximum(phi_loss,gamma_loss) > 10e-3:
             
             # Compute loss for phi and gamma
-            
             phi_loss = self.warmstart_step_simple(self.phi_theta,all_pts)
             gamma_loss = self.warmstart_step_simple(self.gamma_theta,all_pts)
            
@@ -592,7 +591,7 @@ class dgm_net:
         if not os.path.exists('./trainings/' + dirname):
             os.mkdir('./trainings/' + dirname)
         
-        labels = ['res_HJB', 'res_KFP', 'res_b_phi', 'res_b_gamma', 'res_obstacle', 'res_total_mass']
+        labels = ['res_HJB', 'res_KFP', 'res_b', 'res_obstacle', 'res_total_mass']
         history = np.array(self.history)
         fig, ax = plt.subplots(nrows = 2,ncols=3,figsize = (15,10))
 
