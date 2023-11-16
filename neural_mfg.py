@@ -32,7 +32,7 @@ class dgm_net:
         
         self.DTYPE = 'float32'
         self.var = var
-       
+        
         # MFG parameters 
         self.xi    = var['mfg_params']['xi']
         self.c_s   = var['mfg_params']['c_s']
@@ -40,10 +40,16 @@ class dgm_net:
         self.m_0  = var['room']['m_0']
         self.g     = -(2*self.xi**2)/self.m_0
         self.sigma = np.sqrt(2*self.xi*self.c_s)
-        self.l     = -self.g*self.m_0
         self.R     = 0.37
         self.s     =  tf.constant([0, -var['room']['s']],  dtype=self.DTYPE, shape=(1, 2))
         self.pot   = var['mfg_params']['V']
+        
+        self.gamma = var['mfg_params']['gamma']; # discount factor
+        self.alpha = var['mfg_params']['alpha']; # conjestion operator
+        if gamma > 0:
+            self.l     = -self.g*self.m_0
+        else:
+            self.l = 0
         
         # NN parameters
         self.training_steps  = var['dgm_params']['training_steps']
@@ -121,9 +127,9 @@ class dgm_net:
         
         mean_field = tf.math.scalar_mul(self.g,tf.multiply(phi,gamma))
         
-        return mean_field + U0 # formula for the potential from reference  
+        return mean_field + U0 # formula for the potential from reference paper 
       
-    def sample_room(self):
+    def sample_room(self, resampling = False, N_res = None, Nb_res = None):
         '''
         Samples the training points, randomly over simulation area.
 
@@ -134,47 +140,12 @@ class dgm_net:
 
         '''
         
-        # Lower bounds
-        lb = tf.constant([-self.lx, -self.ly], dtype=self.DTYPE)
-        # Upper bounds
-        ub = tf.constant([self.lx, self.ly], dtype=self.DTYPE)
-    
-        # Draw uniform sample points for data in the domain
-        x_room = tf.random.uniform((self.N_in, 1), lb[0], ub[0], dtype=self.DTYPE)
-        y_room = tf.random.uniform((self.N_in, 1), lb[1], ub[1], dtype=self.DTYPE)
-        X_room = tf.concat([x_room, y_room], axis=1)
-        
-        # Divide between points inside and outside the cylinder
-        points_in = tf.where(tf.norm(X_room, axis=1) <= self.R)
-        points_out = tf.where(tf.norm(X_room, axis=1) > self.R)
-        X_in = tf.gather(X_room, points_in)
-        X_out = tf.gather(X_room, points_out)
-        X_in = tf.squeeze(X_in)
-        X_out = tf.squeeze(X_out)
-    
-        # Boundary data (square - outside walls)
-        x_b1 = lb[0] + (ub[0] - lb[0]) * tf.keras.backend.random_bernoulli((int(self.N_b/2), 1), 0.5, dtype=self.DTYPE)
-        y_b1 = tf.random.uniform((int(self.N_b/2), 1), lb[1], ub[1], dtype=self.DTYPE)
-        y_b2 = lb[1] + (ub[1] - lb[1]) * tf.keras.backend.random_bernoulli((int(self.N_b/2), 1), 0.5, dtype=self.DTYPE)
-        x_b2 = tf.random.uniform((int(self.N_b/2), 1), lb[0], ub[0], dtype=self.DTYPE)
-        x_b = tf.concat([x_b1, x_b2], axis=0)
-        y_b = tf.concat([y_b1, y_b2], axis=0)
-        X_b = tf.concat([x_b, y_b], axis=1)
-
-        return pd.DataFrame(X_b.numpy()), pd.DataFrame(X_in.numpy()), pd.DataFrame(X_out.numpy())
-    
-    def re_sample_room(self):
-        '''
-        Samples the training points, randomly over simulation area.
-
-        Returns
-        -------
-        pandas.DataFrame, pandas.DataFrame, pandas.DataFrame
-            Three dataframes containing boundary points, points inside and outside the cylinder.
-
-        '''
-        N = 10000
-        Nb = 200
+        if resampling:
+            N = N_res
+            Nb = Nb_res
+        else: 
+            N = self.N_in
+            Nb = self.N_b
         
         # Lower bounds
         lb = tf.constant([-self.lx, -self.ly], dtype=self.DTYPE)
@@ -196,14 +167,16 @@ class dgm_net:
     
         # Boundary data (square - outside walls)
         x_b1 = lb[0] + (ub[0] - lb[0]) * tf.keras.backend.random_bernoulli((int(Nb/2), 1), 0.5, dtype=self.DTYPE)
-        y_b1 = tf.random.uniform((int(self.N_b/2), 1), lb[1], ub[1], dtype=self.DTYPE)
+        y_b1 = tf.random.uniform((int(Nb/2), 1), lb[1], ub[1], dtype=self.DTYPE)
         y_b2 = lb[1] + (ub[1] - lb[1]) * tf.keras.backend.random_bernoulli((int(Nb/2), 1), 0.5, dtype=self.DTYPE)
-        x_b2 = tf.random.uniform((int(self.N_b/2), 1), lb[0], ub[0], dtype=self.DTYPE)
+        x_b2 = tf.random.uniform((int(Nb/2), 1), lb[0], ub[0], dtype=self.DTYPE)
         x_b = tf.concat([x_b1, x_b2], axis=0)
         y_b = tf.concat([y_b1, y_b2], axis=0)
         X_b = tf.concat([x_b, y_b], axis=1)
 
         return pd.DataFrame(X_b.numpy()), pd.DataFrame(X_in.numpy()), pd.DataFrame(X_out.numpy())
+    
+    
     
     def resample(self):
         '''
@@ -211,12 +184,11 @@ class dgm_net:
         
         Returns
         ------- 
-        void - it changes the attributes X_b, X_in, X_out of self
+        void - it changes the attributes X_b, X_in, X_out of self by appending new points.
+        Such new points are selected to be the M ones performing the worst in terms of PDE residual
 
         '''
-        X_b, X_in, X_out = self.re_sample_room()
-        
-        #all_pts = (pd.concat([X_out,X_in,X_b],axis = 0))
+        X_b, X_in, X_out = self.sample_room(resampling=True,10000,200)
 
         n_in = X_in.shape[0]
         n_out = X_out.shape[0]
@@ -267,7 +239,7 @@ class dgm_net:
         L2_KFP = tf.reduce_mean(res_KFP)
         
         L2_b = tf.reduce_mean(res_b)
-       
+        
         L2_obstacle = tf.reduce_mean(res_obstacle) 
         L_tot = L2_HJB + L2_KFP + L2_b + res_total_mass
         
@@ -278,8 +250,8 @@ class dgm_net:
         self.history.append([L_tot.numpy(),L2_HJB.numpy(),L2_KFP.numpy(),L2_b.numpy(),L2_obstacle.numpy(),res_total_mass.numpy()])
         
         return L_tot
-        
- 
+    
+    
     def get_loss_terms(self,verbose,X_out,X_in,X_b):
         '''
         Computes the terms of loss function by calculating the residuals at each point.
@@ -324,11 +296,11 @@ class dgm_net:
         res_KFP = (self.l*gamma +self.V(phi,gamma,all_pts)*gamma + 0.5*self.mu*self.sigma**4*lap_gamma + self.mu*self.sigma**2*tf.reduce_sum(self.s*grad_gamma,axis = 1))**2
         
         res_b = (self.m_0 - self.phi_theta(X_b)*self.gamma_theta(X_b))**2
-        
+
         res_obstacle = (self.phi_theta(X_in) +  self.gamma_theta(X_in))**2
-       
+        
         res_total_mass = (tf.reduce_mean(phi*gamma)*(2*self.lx)*(2*self.ly)-self.total_mass)**2
-       
+        
         return res_HJB, res_KFP, res_b,res_obstacle, res_total_mass
       
     def train_step(self,verbose):
@@ -362,7 +334,7 @@ class dgm_net:
         
         return f_loss
     
-    def train(self,verbose = True, resampling = False):
+    def train(self, resampling = False):
         '''
         Applies self.training_steps. 
         
@@ -377,36 +349,36 @@ class dgm_net:
 
         '''
 
-        if verbose:
-            print('    #iter          res_HJB          res_KFP          res_b             res_obs           total_mass      |   Loss_total')
-            print('-----------------------------------------------------------------------------------------------------------------------')
-            # standard training (without resampling)
-            print('    ',end="")
-            if !resampling:
-                for step in range(1,self.training_steps + 1):
+        print('    #iter          res_HJB          res_KFP          res_b             res_obs           total_mass      |   Loss_total')
+        print('-----------------------------------------------------------------------------------------------------------------------')
+        print('    ',end="")
+            
+        # standard training (without resampling)
+        if !resampling:
+            for step in range(1,self.training_steps + 1):
 
-                    if step % 10 == 0:
-                        print('{:6d}'.format(step),end="")
-                        # Train phi 
-                        self.train_step(True)
-                        print('    ',end="")
-                    else:
-                        self.train_step(False)
-            if resampling:
-                # training with resampling
-                for step in range(1,self.training_steps + 1):
+                if step % 10 == 0:
+                    print('{:6d}'.format(step),end="")
+                    self.train_step(True)
+                    print('    ',end="")
+                else:
+                    self.train_step(False)
+            
+            # training with resampling
+        else:
+            for step in range(1,self.training_steps + 1):
 
-                    if step % 10 == 0:
-                        print('{:6d}'.format(step),end="")
-                        # Train phi 
-                        self.train_step(True)
-                        print('    ',end="")
-                    else:
-                        self.train_step(False)
+                if step % 10 == 0:
+                    print('{:6d}'.format(step),end="")
+                    # Train phi 
+                    self.train_step(True)
+                    print('    ',end="")
+                else:
+                    self.train_step(False)
 
-                    # every m=resampling_step, we refine the dataset by RAR-G with M new points
-                    if step % self.resampling_step == 0:
-                        self.resample()
+                # every m=resampling_step, we refine the dataset by RAR-G with M new points
+                if step % self.resampling_step == 0:
+                    self.resample()
             
     
     def warmstart_step(self,f_theta,f_IC,points_IC):
@@ -450,6 +422,7 @@ class dgm_net:
         
         return f_loss
     
+    
     def warmstart_step_simple(self,f_theta,all_pts):
         '''
         One step of warmstart with simple IC
@@ -468,9 +441,8 @@ class dgm_net:
         
         
         optimizer = tf.optimizers.Adam(learning_rate = self.learning_rate)
-       
-        # Compute gradient wrt variables for phi and gamma
         
+        # Compute gradient wrt variables for phi and gamma together
         with tf.GradientTape() as f_tape:
             
             f_vars = f_theta.trainable_weights
@@ -482,7 +454,8 @@ class dgm_net:
         optimizer.apply_gradients(zip(f_grad, f_vars))
         
         return f_loss
- 
+    
+    
     def warmstart(self,phi_IC,gamma_IC,points_IC):
         '''
         Applies self.training_steps of warmstart
@@ -504,15 +477,14 @@ class dgm_net:
         phi_loss = 1
         gamma_loss = 1
         step = 0
-       
-        
+
         while np.maximum(phi_loss,gamma_loss) > 10e-3:
             
             # Compute loss for phi and gamma
             
             phi_loss = self.warmstart_step(self.phi_theta,phi_IC,points_IC)
             gamma_loss = self.warmstart_step(self.gamma_theta,gamma_IC,points_IC)
-           
+
             if step % 100 == 0:
                 print('WS step {:5d}, loss phi={:10.3e}, loss gamma={:10.3e}'.format(step, phi_loss,gamma_loss))
                 
@@ -538,19 +510,19 @@ class dgm_net:
         phi_loss = 1
         gamma_loss = 1
         step = 0
-       
+
         while np.maximum(phi_loss,gamma_loss) > 10e-3:
             
             # Compute loss for phi and gamma
             phi_loss = self.warmstart_step_simple(self.phi_theta,all_pts)
             gamma_loss = self.warmstart_step_simple(self.gamma_theta,all_pts)
-           
+
             if step % 100 == 0:
                 print('WS step {:5d}, loss phi={:10.3e}, loss gamma={:10.3e}'.format(step, phi_loss,gamma_loss))
             
             step +=1
-        
-     
+
+            
     def draw(self):
         '''
         Draw the scatter plot of the density of pedestrians.
