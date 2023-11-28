@@ -199,7 +199,7 @@ class dgm_net:
         res_HJB, res_KFP, _, _ = self.get_loss_terms(X_out,X_in,X_b)
         
         PDEs_residual = pd.DataFrame(res_HJB.numpy() + res_KFP.numpy())
-        PDEs_residual.sort_values(by=PDEs_residual.columns[1], ascending=False)
+        PDEs_residual.sort_values(by=PDEs_residual.columns[0], ascending=False)
         
         X_b_new     = [] 
         X_in_new    = []
@@ -226,7 +226,7 @@ class dgm_net:
         self.N_b   = self.X_b.shape[0]
         return
     
-    def get_L2_loss(self):
+    def get_L2_loss(self,verbose):
         '''
         Computes L2 loss function by calculating the L2 norm of the residuals.
 
@@ -244,8 +244,8 @@ class dgm_net:
         L2_b = tf.reduce_mean(res_b)
         
         L_tot = self.weight_HJB*L2_HJB + L2_KFP + L2_b + res_total_mass
-         
-        print('        {:10.3e}       {:10.3e}       {:10.3e}        {:10.3e}       |  {:10.3e}'.format(L2_HJB,L2_KFP,L2_b,res_total_mass, L_tot))
+        if verbose: 
+            print('        {:10.3e}       {:10.3e}       {:10.3e}        {:10.3e}       |  {:10.3e}'.format(L2_HJB,L2_KFP,L2_b,res_total_mass, L_tot))
         
         
         self.history.append([L_tot.numpy(),L2_HJB.numpy(),L2_KFP.numpy(),L2_b.numpy(),res_total_mass.numpy()])
@@ -325,7 +325,7 @@ class dgm_net:
             
             f_vars = gamma_theta.trainable_weights + gamma_theta.trainable_weights
             f_tape.watch(f_vars)
-            f_loss = self.get_L2_loss()
+            f_loss = self.get_L2_loss(verbose)
             f_grad = f_tape.gradient(f_loss,f_vars)
         
         optimizer.apply_gradients(zip(f_grad, f_vars))
@@ -507,7 +507,7 @@ class dgm_net:
         gamma_loss = 1
         step = 0
 
-        while np.maximum(phi_loss,gamma_loss) > 10e-3:
+        while np.maximum(phi_loss,gamma_loss) > 10e-4:
             
             # Compute loss for phi and gamma
             phi_loss = self.warmstart_step_simple(self.phi_theta,self.all_pts)
@@ -531,7 +531,7 @@ class dgm_net:
         None.
 
         '''
-        plt.figure(figsize=(15,15))
+        plt.figure(figsize=(10,10))
         plt.xlabel('$x$')
         plt.ylabel('$y$')
         plt.yticks(np.arange(-2, 2.1, 2),fontsize=30)
@@ -571,7 +571,7 @@ class dgm_net:
         '''
             
         # "residuals"
-        plt.figure(figsize=(15,15))
+        plt.figure(figsize=(10,10))
         plt.xlabel('$x$')
         plt.ylabel('$y$')
         plt.yticks(np.arange(-2, 2.1, 2),fontsize=30)
@@ -591,7 +591,7 @@ class dgm_net:
             plt.savefig('./trainings/' + directory + '/residuals')
             
         # "loss_in_room"
-        plt.figure(figsize=(15,15))
+        plt.figure(figsize=(10,10))
         plt.xlabel('$x$')
         plt.ylabel('$y$')
         plt.yticks(np.arange(-2, 2.1, 2),fontsize=30)
@@ -613,7 +613,7 @@ class dgm_net:
             
             
         # "dgm_vs_ref"
-        plt.figure(figsize=(15,15))
+        plt.figure(figsize=(10,10))
         plt.xlabel('$x$')
         plt.ylabel('$y$')
         plt.yticks(np.arange(-2, 2.1, 2),fontsize=30)
