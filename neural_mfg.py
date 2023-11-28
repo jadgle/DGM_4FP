@@ -46,7 +46,7 @@ class dgm_net:
         
         self.gamma = var['mfg_params']['gamma']; # discount factor
         self.alpha = var['mfg_params']['alpha']; # conjestion operator
-        if gamma == 0:
+        if self.gamma == 0:
             self.l     = -self.g*self.m_0
         else:
             self.l = 0
@@ -388,7 +388,9 @@ class dgm_net:
             print('-----------------------------------------------------------------------------------------------------------------------')
             # standard training (without resampling)
             print('    ',end="")
-            if !resampling:
+            
+            if not resampling:
+                
                 for step in range(1,self.training_steps + 1):
 
                     if step % 10 == 0:
