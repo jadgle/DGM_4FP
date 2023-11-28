@@ -17,17 +17,17 @@ import datetime
 
 class dgm_net:
     
-    def __init__(self):
+    def __init__(self,directory=""):
         '''
         Initialise the two NNs for Phi and Theta, creates points.
-
+        By specifying a different directory it is possible to load models with saved configurations
         Returns
         -------
         None.
 
         '''
         
-        with open('config.json') as f:
+        with open("./" + directory + "/config.json") as f:
             var = json.loads(f.read())
         
         self.DTYPE = 'float32'
@@ -97,7 +97,8 @@ class dgm_net:
         
         self.X_b, self.X_in, self.X_out = self.sample_room()
         
-        self.all_pts = tf.constant(tf.concat([self.X_out,self.X_in,self.X_b],axis = 0))
+        self.all_pts   = tf.constant(tf.concat([self.X_out,self.X_in,self.X_b],axis = 0))
+        self.points_IC = np.loadtxt("IC/points.txt")
         
         self.history = []
     
@@ -195,7 +196,7 @@ class dgm_net:
         n_in = X_in.shape[0]
         n_out = X_out.shape[0]
         
-        res_HJB, res_KFP, _, _ = self.get_loss_terms(0,X_out,X_in,X_b)
+        res_HJB, res_KFP, _, _ = self.get_loss_terms(X_out,X_in,X_b)
         
         PDEs_residual = pd.DataFrame(res_HJB.numpy() + res_KFP.numpy())
         PDEs_residual.sort_values(by=PDEs_residual.columns[1], ascending=False)
@@ -225,7 +226,7 @@ class dgm_net:
         self.N_b   = self.X_b.shape[0]
         return
     
-    def get_L2_loss(self,verbose):
+    def get_L2_loss(self):
         '''
         Computes L2 loss function by calculating the L2 norm of the residuals.
 
@@ -235,17 +236,16 @@ class dgm_net:
             Loss function sum of the different residuals. The default is True.
 
         '''
-        res_HJB, res_KFP, res_b,res_total_mass = self.get_loss_terms(verbose,self.X_out,self.X_in,self.X_b)
+        res_HJB, res_KFP, res_b,res_total_mass = self.get_loss_terms(self.X_out,self.X_in,self.X_b)
         
         L2_HJB = tf.reduce_mean(res_HJB)  
         L2_KFP = tf.reduce_mean(res_KFP)
         
         L2_b = tf.reduce_mean(res_b)
         
-        L_tot = L2_HJB + L2_KFP + L2_b + res_total_mass
-        
-        if verbose: 
-            print('        {:10.3e}       {:10.3e}       {:10.3e}        {:10.3e}       |  {:10.3e}'.format(L2_HJB,L2_KFP,L2_b,res_total_mass, L_tot))
+        L_tot = self.weight_HJB*L2_HJB + L2_KFP + L2_b + res_total_mass
+         
+        print('        {:10.3e}       {:10.3e}       {:10.3e}        {:10.3e}       |  {:10.3e}'.format(L2_HJB,L2_KFP,L2_b,res_total_mass, L_tot))
         
         
         self.history.append([L_tot.numpy(),L2_HJB.numpy(),L2_KFP.numpy(),L2_b.numpy(),res_total_mass.numpy()])
@@ -253,7 +253,7 @@ class dgm_net:
         return L_tot
     
     
-    def get_loss_terms(self,verbose,X_out,X_in,X_b):
+    def get_loss_terms(self,X_out,X_in,X_b):
         '''
         Computes the terms of loss function by calculating the residuals at each point.
 
@@ -263,44 +263,43 @@ class dgm_net:
             Loss function terms of the different residuals. The default is True.
 
         '''
-        
-        all_pts = tf.Variable(tf.concat([X_out,X_in,X_b],axis = 0))
+        points = tf.Variable(tf.concat([X_out,X_in,X_b],axis = 0))
         
         # Compute gradient and laplacian for Phi
         
         with tf.GradientTape() as phi_tape_1:
             with tf.GradientTape() as phi_tape_2:
             
-                phi = self.phi_theta(all_pts)
+                phi = self.phi_theta(points)
             
-            grad_phi = phi_tape_2.gradient(phi,all_pts)
+            grad_phi = phi_tape_2.gradient(phi,points)
         
-        jac_phi = phi_tape_1.gradient(grad_phi,all_pts)
-        lap_phi = tf.math.reduce_sum(jac_phi,axis = 1)
+        jac_phi = phi_tape_1.gradient(grad_phi,points)
+        lap_phi = tf.math.reduce_sum(jac_phi,axis = 1,keepdims=True)
         
         # Compute gradient and laplacian for Gamma
         
         with tf.GradientTape() as gamma_tape_1:
             with tf.GradientTape() as gamma_tape_2:
             
-                gamma = self.gamma_theta(all_pts)
+                gamma = self.gamma_theta(points)
             
-            grad_gamma = gamma_tape_2.gradient(gamma,all_pts)
+            grad_gamma = gamma_tape_2.gradient(gamma,points)
         
-        jac_gamma = gamma_tape_1.gradient(grad_gamma,all_pts)
-        lap_gamma = tf.math.reduce_sum(jac_gamma,axis = 1)
+        jac_gamma = gamma_tape_1.gradient(grad_gamma,points)
+        lap_gamma = tf.math.reduce_sum(jac_gamma,axis = 1,keepdims=True)
         
         # Compute terms of the loss function
         
-        res_HJB = (self.l*phi +self.V(phi,gamma,all_pts)*phi + 0.5*self.mu*self.sigma**4*lap_phi - self.mu*self.sigma**2*tf.reduce_sum(self.s*grad_phi,axis = 1))**2
+        res_HJB = (self.l*phi +self.V(phi,gamma,points)*phi + 0.5*self.mu*self.sigma**4*lap_phi - self.mu*self.sigma**2*tf.reduce_sum(self.s*grad_phi,axis = 1,keepdims=True))**2
     
-        res_KFP = (self.l*gamma +self.V(phi,gamma,all_pts)*gamma + 0.5*self.mu*self.sigma**4*lap_gamma + self.mu*self.sigma**2*tf.reduce_sum(self.s*grad_gamma,axis = 1))**2
+        res_KFP = (self.l*gamma +self.V(phi,gamma,points)*gamma + 0.5*self.mu*self.sigma**4*lap_gamma + self.mu*self.sigma**2*tf.reduce_sum(self.s*grad_gamma,axis = 1,keepdims=True))**2
         
         res_b = (self.m_0 - self.phi_theta(X_b)*self.gamma_theta(X_b))**2
         
         res_total_mass = (tf.reduce_mean(phi*gamma)*(2*self.lx)*(2*self.ly)-self.total_mass)**2
         
-        return self.weight_HJB*res_HJB, res_KFP, res_b, res_total_mass
+        return res_HJB, res_KFP, res_b, res_total_mass
       
     def train_step(self,verbose):
         '''
@@ -326,7 +325,7 @@ class dgm_net:
             
             f_vars = gamma_theta.trainable_weights + gamma_theta.trainable_weights
             f_tape.watch(f_vars)
-            f_loss = self.get_L2_loss(verbose)
+            f_loss = self.get_L2_loss()
             f_grad = f_tape.gradient(f_loss,f_vars)
         
         optimizer.apply_gradients(zip(f_grad, f_vars))
@@ -456,7 +455,7 @@ class dgm_net:
         return f_loss
     
     
-    def warmstart(self,phi_IC,gamma_IC,points_IC):
+    def warmstart(self,phi_IC,gamma_IC):
         '''
         Applies self.training_steps of warmstart
 
@@ -482,8 +481,8 @@ class dgm_net:
             
             # Compute loss for phi and gamma
             
-            phi_loss = self.warmstart_step(self.phi_theta,phi_IC,points_IC)
-            gamma_loss = self.warmstart_step(self.gamma_theta,gamma_IC,points_IC)
+            phi_loss = self.warmstart_step(self.phi_theta,phi_IC,self.points_IC)
+            gamma_loss = self.warmstart_step(self.gamma_theta,gamma_IC,self.points_IC)
 
             if step % 100 == 0:
                 print('WS step {:5d}, loss phi={:10.3e}, loss gamma={:10.3e}'.format(step, phi_loss,gamma_loss))
@@ -515,31 +514,126 @@ class dgm_net:
             gamma_loss = self.warmstart_step_simple(self.gamma_theta,self.all_pts)
 
             if step % 100 == 0:
-                print('WS step {:5d}, loss phi={:10.3e}, loss gamma={:10.3e}'.format(step, phi_loss,gamma_loss))
+                print('WS step {:5d}, loss phi={:10.3e}, loss gamma={:10.3e}'.format(step, phi_loss, gamma_loss))
             
             step +=1
         print('WS step {:5d}, loss phi={:10.3e}, loss gamma={:10.3e}'.format(step, phi_loss,gamma_loss))
             
-    def draw(self):
+    def draw(self, IC_points=False, saving=False, directory=None):
         '''
-        Draw the scatter plot of the density of pedestrians.
+        Draw the scatter plot of the density of pedestrians. Two different possible resolutions:
+        - IC_points == False (default) draws the mass at the training points
+        - IC_points == True draws the mass at the points of the reference finite difference solution
+        Option to save in desired directory (default is just plotting)
 
         Returns
         -------
         None.
 
         '''
-        all_pts = tf.concat([self.X_out,self.X_in,self.X_b],axis = 0)
-        
-        m = self.gamma_theta(all_pts)*self.phi_theta(all_pts)
-         
-        plt.figure(figsize=(8,8))
-        plt.scatter(all_pts.numpy()[:,0], all_pts.numpy()[:,1], c=m, cmap='hot_r')
+        plt.figure(figsize=(15,15))
         plt.xlabel('$x$')
         plt.ylabel('$y$')
-        plt.colorbar()
-        plt.clim(vmin = 0)
-        plt.show()     
+        plt.yticks(np.arange(-2, 2.1, 2),fontsize=30)
+        plt.xticks(np.arange(-2, 2.1, 2),fontsize=30)
+        plt.box(False)
+            
+        if not IC_points:
+            m = self.gamma_theta(self.all_pts)*self.phi_theta(self.all_pts)           
+            plt.scatter(self.all_pts.numpy()[:,0], self.all_pts.numpy()[:,1], c=m, cmap='hot_r')
+            
+        else: 
+            m = self.gamma_theta(self.points_IC)*self.phi_theta(self.points_IC)            
+            plt.scatter(self.points_IC[:,0], self.points_IC[:,1], s=13, c=m, cmap='hot_r')
+        
+        cbar = plt.colorbar()
+        cbar.ax.tick_params(labelsize=30) 
+        plt.clim(vmin = 0)    
+        
+        plt.show()   
+        if saving:
+                plt.savefig('./trainings/' + directory + '/solution_m')
+                
+                
+        
+    def error_plots(self, saving=False, directory=None):
+        '''
+        Draw the error plots, option to save in desired directory (default is just plotting)
+
+        "residuals"      -> plot of the different components of the loss function over training time
+        "loss_in_room"   -> plot of the L2 loss in the space domain
+        "dgm_vs_ref"     -> plot of the L2 distance from the finite diff. reference solution in space
+        
+        Returns
+        -------
+        None.
+
+        '''
+            
+        # "residuals"
+        plt.figure(figsize=(15,15))
+        plt.xlabel('$x$')
+        plt.ylabel('$y$')
+        plt.yticks(np.arange(-2, 2.1, 2),fontsize=30)
+        plt.xticks(np.arange(-2, 2.1, 2),fontsize=30)
+        plt.box(False)
+            
+        labels = ['res_HJB', 'res_KFP', 'res_b', 'res_total_mass']
+        history = np.array(self.history)
+        fig, ax = plt.subplots(nrows = 2,ncols=2,figsize = (15,10))
+
+        for cols in range(1,history.shape[1]):
+            col = cols-1
+            ax[col//2,col%2].plot(history[:,cols])
+            ax[col//2,col%2].set_title(labels[col])        
+        plt.show()
+        if saving:
+            plt.savefig('./trainings/' + directory + '/residuals')
+            
+        # "loss_in_room"
+        plt.figure(figsize=(15,15))
+        plt.xlabel('$x$')
+        plt.ylabel('$y$')
+        plt.yticks(np.arange(-2, 2.1, 2),fontsize=30)
+        plt.xticks(np.arange(-2, 2.1, 2),fontsize=30)
+        plt.box(False)
+        
+        X_b, X_in, X_out = self.sample_room(True,1,1)
+        X_out = self.points_IC
+        points = tf.constant(tf.concat([X_out,X_in,X_b],axis = 0))
+        res_HJB, res_KFP,  _, _ = self.get_loss_terms(X_b, X_in, X_out)
+        loss = res_HJB + res_KFP
+        plt.scatter(points.numpy()[:,0], points.numpy()[:,1], c=loss, cmap='magma_r')
+        cbar = plt.colorbar()
+        cbar.ax.tick_params(labelsize=30) 
+        plt.title("L2 loss in space")
+        plt.show()
+        if saving:
+            plt.savefig('./trainings/' + directory + '/loss_in_room')
+            
+            
+        # "dgm_vs_ref"
+        plt.figure(figsize=(15,15))
+        plt.xlabel('$x$')
+        plt.ylabel('$y$')
+        plt.yticks(np.arange(-2, 2.1, 2),fontsize=30)
+        plt.xticks(np.arange(-2, 2.1, 2),fontsize=30)
+        plt.box(False)
+            
+        gamma_ref = np.loadtxt("IC/gamma.txt",ndmin=2)
+        phi_ref = np.loadtxt("IC/phi.txt",ndmin=2)
+        m_ref = gamma_ref*phi_ref
+        m_dgm = self.gamma_theta(self.points_IC)*self.phi_theta(self.points_IC) 
+        discrepancy = np.absolute(m_ref-m_dgm)
+        plt.scatter(self.points_IC[:,0], self.points_IC[:,1], s=13, c=discrepancy, cmap='magma_r')
+        cbar = plt.colorbar()
+        cbar.ax.tick_params(labelsize=30) 
+        plt.title("Discrepancy vs Finite Difference solution")
+        plt.show() 
+        if saving:
+            plt.savefig('./trainings/' + directory + '/dgm_vs_ref')
+        
+        
         
     def save(self):
         '''
@@ -551,6 +645,7 @@ class dgm_net:
 
         '''
         
+        # creating a folder for saving the info (if doesn't exist already) depending on current time and day
         if not os.path.exists('./trainings'):
             os.mkdir('./trainings')
             
@@ -560,41 +655,41 @@ class dgm_net:
         if not os.path.exists('./trainings/' + dirname):
             os.mkdir('./trainings/' + dirname)
         
-        labels = ['res_HJB', 'res_KFP', 'res_b', 'res_obstacle', 'res_total_mass']
-        history = np.array(self.history)
-        fig, ax = plt.subplots(nrows = 2,ncols=3,figsize = (15,10))
-
-        for col in range(history.shape[1]):
-    
-            ax[col//3,col%3].plot(history[:,col])
-            ax[col//3,col%3].set_title(labels[col])
-    
-        plt.savefig('./trainings/' + dirname + '/residuals')
         
-        training = {}
-
-        training['config'] = self.var
-        training['phi_theta'] = self.phi_theta(self.all_pts).numpy().tolist()
-        training['gamma_theta'] = self.gamma_theta(self.all_pts).numpy().tolist()
-        training['points'] = self.all_pts.numpy().tolist()
+        # plotting/saving the solution and the errors
+        self.error_plots(saving=True, directory=dirname)
+        self.draw(IC_points=True, saving=True, directory=dirname)
         
-        # Serializing json
-        json_object = json.dumps(training, indent=4)
-         
-        # Writing to sample.json
-        with open("./trainings/" + dirname + "/net.json", "w") as outfile:
-            outfile.write(json_object)
+        # saving the network weights
+        self.phi_theta.save_weights("./trainings/" + dirname +"/phi.h5")
+        self.gamma_theta.save_weights("./trainings/" + dirname +"/gamma.h5")
+        
+        # saving the network model
+        with open("./trainings/" + dirname +"/config.json", "w") as outfile:
+            json.dump(self.var, outfile)
             
-        all_pts = tf.concat([self.X_out,self.X_in,self.X_b],axis = 0)
+            
+    def load(self,directory_name):
+        '''
+        Load model weights from previously saved trainings. Before running this, please run
+        nn = dgm_net(directory_name)
+        nn.load(directory_name)
+
+        Returns
+        -------
+        None.
+
+        '''
         
-        m = self.gamma_theta(all_pts)*self.phi_theta(all_pts)
-         
-        plt.figure(figsize=(8,8))
-        plt.scatter(all_pts.numpy()[:,0], all_pts.numpy()[:,1], c=m, cmap='hot_r')
-        plt.xlabel('$x$')
-        plt.ylabel('$y$')
-        plt.colorbar()
-        plt.clim(vmin = 0)
+        # initialize weights
+        self.warmstart_step_simple(self.phi_theta,self.all_pts)
+        self.warmstart_step_simple(self.gamma_theta,self.all_pts)
+        # load saved weights
+        self.phi_theta.load_weights("./" + directory_name + "/phi.h5")
+        self.gamma_theta.load_weights("./" + directory_name + "/gamma.h5")
         
-        plt.savefig('./trainings/' + dirname + '/density')
+            
+        
+        
+        
         
