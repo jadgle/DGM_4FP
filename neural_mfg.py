@@ -56,6 +56,8 @@ class dgm_net:
         self.learning_rate   = var['dgm_params']['learning_rate']
         self.M               = var['dgm_params']['M']
         self.resampling_step = var['dgm_params']['resampling_step']
+        self.weight_HJB      = 1 # loss weight hyperparameter (can be changed on the main script if 
+                                 # the HJB residual is stuck during training). Neutralized in default 
 
         # Room definition 
         self.lx   = var['room']['lx']
@@ -298,7 +300,7 @@ class dgm_net:
         
         res_total_mass = (tf.reduce_mean(phi*gamma)*(2*self.lx)*(2*self.ly)-self.total_mass)**2
         
-        return res_HJB, res_KFP, res_b, res_total_mass
+        return self.weight_HJB*res_HJB, res_KFP, res_b, res_total_mass
       
     def train_step(self,verbose):
         '''
