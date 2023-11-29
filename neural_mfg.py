@@ -356,9 +356,11 @@ class dgm_net:
             print('-----------------------------------------------------------------------------------------------------')
             print('    ',end="")
             
+
         # standard training (without resampling)
         if not resampling:
             for step in range(1,self.training_steps + 1):
+
 
                 if step % frequency == 0 and verbose: 
                     if label==None:
