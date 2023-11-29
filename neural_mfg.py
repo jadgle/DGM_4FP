@@ -357,7 +357,7 @@ class dgm_net:
             print('    ',end="")
             
         # standard training (without resampling)
-        if resampling:
+        if not resampling:
             for step in range(1,self.training_steps + 1):
 
                 if step % frequency == 0 and verbose: 
@@ -370,9 +370,6 @@ class dgm_net:
                     print('    ',end="")
                 else:
                     self.train_step(False)
-                # every m=resampling_step, we refine the dataset by RAR-G with M new points
-                if step % self.resampling_step == 0:
-                    self.resample()
             
             # training with resampling
         else:
@@ -388,6 +385,9 @@ class dgm_net:
                     print('    ',end="")
                 else:
                     self.train_step(False)
+                # every m=resampling_step, we refine the dataset by RAR-G with M new points
+                if step % self.resampling_step == 0:
+                    self.resample()
 
                 
             
