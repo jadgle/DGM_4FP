@@ -224,6 +224,7 @@ class dgm_net:
         
         self.N_in  = self.X_in.shape[0] + self.X_out.shape[0]
         self.N_b   = self.X_b.shape[0]
+        self.all_pts   = tf.constant(tf.concat([self.X_out,self.X_in,self.X_b],axis = 0))
         return
     
     def get_L2_loss(self,verbose):
@@ -570,14 +571,7 @@ class dgm_net:
 
         '''
             
-        # "residuals"
-        plt.figure(figsize=(10,10))
-        plt.xlabel('$x$')
-        plt.ylabel('$y$')
-        plt.yticks(np.arange(-2, 2.1, 2),fontsize=30)
-        plt.xticks(np.arange(-2, 2.1, 2),fontsize=30)
-        plt.box(False)
-            
+        # "residuals"         
         labels = ['res_HJB', 'res_KFP', 'res_b', 'res_total_mass']
         history = np.array(self.history)
         fig, ax = plt.subplots(nrows = 2,ncols=2,figsize = (15,10))
@@ -655,7 +649,6 @@ class dgm_net:
         if not os.path.exists('./trainings/' + dirname):
             os.mkdir('./trainings/' + dirname)
         
-        
         # plotting/saving the solution and the errors
         self.error_plots(saving=True, directory=dirname)
         self.draw(IC_points=True, saving=True, directory=dirname)
@@ -667,6 +660,10 @@ class dgm_net:
         # saving the network model
         with open("./trainings/" + dirname +"/config.json", "w") as outfile:
             json.dump(self.var, outfile)
+            
+        # saving the loss history
+        loss_history = pd.DataFrame(self.history)
+        loss_history.to_csv("./trainings/" + dirname +"/history.csv")
             
             
     def load(self,directory_name):
@@ -687,6 +684,9 @@ class dgm_net:
         # load saved weights
         self.phi_theta.load_weights("./" + directory_name + "/phi.h5")
         self.gamma_theta.load_weights("./" + directory_name + "/gamma.h5")
+        
+        loss_history = pd.read_csv(directory_name + "/history.csv",header='infer',index_col=0)
+        self.history = loss_history.values.tolist()
         
             
         
