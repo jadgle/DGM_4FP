@@ -58,6 +58,9 @@ class dgm_net:
         self.resampling_step = var['dgm_params']['resampling_step']
         self.weight_HJB      = 1 # loss weight hyperparameter (can be changed on the main script if 
                                  # the HJB residual is stuck during training). Neutralized in default 
+        self.weight_KFP      = 1
+        self.weight_b        = 1
+        self.weight_mass     = 1
 
         # Room definition 
         self.lx   = var['room']['lx']
@@ -66,7 +69,7 @@ class dgm_net:
         self.N_in = int(var['room']['N_in'])
         
         # Initial total mass
-        self.total_mass = tf.constant(self.m_0*(2*self.lx)*(2*self.ly),dtype=self.DTYPE)
+        self.total_mass = tf.constant(self.m_0*(2*self.lx)*(2*self.ly)-np.pi*self.R**2,dtype=self.DTYPE)
         
         # Seed value
         self.seed_value = 0
@@ -244,14 +247,15 @@ class dgm_net:
         
         L2_b = tf.reduce_mean(res_b)
         
-        L_tot = self.weight_HJB*L2_HJB + L2_KFP + L2_b + res_total_mass
+        L_tot = L2_HJB + L2_KFP + L2_b + res_total_mass
+        L_tot_weighted = self.weight_HJB*L2_HJB + self.weight_KFP*L2_KFP + self.weight_b*L2_b + self.weight_mass*res_total_mass
         if verbose: 
             print('        {:10.3e}       {:10.3e}       {:10.3e}        {:10.3e}       |  {:10.3e}'.format(L2_HJB,L2_KFP,L2_b,res_total_mass, L_tot))
         
         
         self.history.append([L_tot.numpy(),L2_HJB.numpy(),L2_KFP.numpy(),L2_b.numpy(),res_total_mass.numpy()])
         
-        return L_tot
+        return L_tot_weighted
     
     
     def get_loss_terms(self,X_out,X_in,X_b):
@@ -333,7 +337,7 @@ class dgm_net:
         
         return f_loss
     
-    def train(self, resampling = False):
+    def train(self, verbose = 2, resampling = False, frequency=10, label=None):
         '''
         Applies self.training_steps. 
         
@@ -347,17 +351,21 @@ class dgm_net:
         None.
 
         '''
-
-        print('    #iter          res_HJB          res_KFP          res_b           total_mass      |   Loss_total')
-        print('----------------------------------------------------------------------------------------------------')
-        print('    ',end="")
+        if verbose>1:
+            print('      #iter         res_HJB          res_KFP          res_b            total_mass      |   Loss_total')
+            print('-----------------------------------------------------------------------------------------------------')
+            print('    ',end="")
             
         # standard training (without resampling)
         if resampling:
             for step in range(1,self.training_steps + 1):
 
-                if step % 10 == 0:
-                    print('{:6d}'.format(step),end="")
+                if step % frequency == 0 and verbose: 
+                    if label==None:
+                        print('{:6d}'.format(step),end="")
+                    else: 
+                        print('{:.2f}'.format(label),end="")
+                        
                     self.train_step(True)
                     print('    ',end="")
                 else:
@@ -370,9 +378,12 @@ class dgm_net:
         else:
             for step in range(1,self.training_steps + 1):
 
-                if step % 10 == 0:
-                    print('{:6d}'.format(step),end="")
-                    # Train phi 
+                if step % frequency == 0 and verbose: 
+                    if label==None:
+                        print('{:6d}'.format(step),end="")
+                    else: 
+                        print('{:.2f}'.format(label),end="")
+                        
                     self.train_step(True)
                     print('    ',end="")
                 else:
