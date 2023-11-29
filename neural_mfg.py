@@ -46,7 +46,7 @@ class dgm_net:
         
         self.gamma = var['mfg_params']['gamma']; # discount factor
         self.alpha = var['mfg_params']['alpha']; # conjestion operator
-        if self.gamma > 0:
+        if self.gamma == 0:
             self.l     = -self.g*self.m_0
         else:
             self.l = 0
