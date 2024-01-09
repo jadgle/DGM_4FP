@@ -184,7 +184,7 @@ class dgm_net:
     
     
     
-    def resample(self):
+    def resample(self, N_big = 10000, Nb_big = 200, residual_based = True, as_copy = False):
         '''
         Residual-based adaptive refinement method with greed (RAR-G).
         
@@ -194,22 +194,26 @@ class dgm_net:
         Such new points are selected to be the M ones performing the worst in terms of PDE residual
 
         '''
-        X_b, X_in, X_out = self.sample_room(True,10000,200)
+        X_b, X_in, X_out = self.sample_room(True,N_big,Nb_big)
 
         n_in = X_in.shape[0]
         n_out = X_out.shape[0]
         
-        res_HJB, res_KFP, _, _ = self.get_loss_terms(X_out,X_in,X_b)
-        
-        PDEs_residual = pd.DataFrame(res_HJB.numpy() + res_KFP.numpy())
-        PDEs_residual.sort_values(by=PDEs_residual.columns[0], ascending=False)
+        if residual_based: # selection based on the PDE residuals - we collect the points performing the worst
+            res_HJB, res_KFP, _ = self.get_loss_terms(X_out,X_in,X_b)
+            PDEs_residual = pd.DataFrame(res_HJB.numpy() + res_KFP.numpy())
+            PDEs_residual.sort_values(by=PDEs_residual.columns[0], ascending=False)
+            key = PDEs_residual
+        else: # random selection
+            points = pd.concat([X_out,X_in,X_b],axis = 0)
+            key = points.sample(n=self.M)
         
         X_b_new     = [] 
         X_in_new    = []
         X_out_new   = []
         
         for i in range(self.M):
-            ind = PDEs_residual.index.values[i]
+            ind = key.index.values[i]
             if  ind < n_out:
                 X_out_new.append(X_out.iloc[ind])
             elif ind < n_in:
@@ -221,16 +225,20 @@ class dgm_net:
         X_in_new = pd.DataFrame(X_in_new)
         X_b_new = pd.DataFrame(X_b_new)
         
-        self.X_out = pd.concat([self.X_out, X_out_new], ignore_index=True)
-        self.X_in  = pd.concat([self.X_in, X_in_new], ignore_index=True)
-        self.X_b   = pd.concat([self.X_b, X_b_new], ignore_index=True)
-        
-        self.N_in  = self.X_in.shape[0] + self.X_out.shape[0]
-        self.N_b   = self.X_b.shape[0]
-        self.all_pts   = tf.constant(tf.concat([self.X_out,self.X_in,self.X_b],axis = 0))
-        return
+        if as_copy:
+            return X_b, X_in, X_out, X_b_new, X_in_new, X_out_new
+        else:
+            self.X_out = pd.concat([self.X_out, X_out_new], ignore_index=True)
+            self.X_in  = pd.concat([self.X_in, X_in_new], ignore_index=True)
+            self.X_b   = pd.concat([self.X_b, X_b_new], ignore_index=True)
+
+            self.N_in  = self.X_in.shape[0] + self.X_out.shape[0]
+            self.N_b   = self.X_b.shape[0]
+            self.all_pts   = tf.constant(tf.concat([self.X_out,self.X_in,self.X_b],axis = 0))
+            return
+            
     
-    def get_L2_loss(self,verbose):
+    def get_L2_loss(self,verbose,parsimony):
         '''
         Computes L2 loss function by calculating the L2 norm of the residuals.
 
@@ -240,7 +248,16 @@ class dgm_net:
             Loss function sum of the different residuals. The default is True.
 
         '''
-        res_HJB, res_KFP, res_b,res_total_mass = self.get_loss_terms(self.X_out,self.X_in,self.X_b)
+        if parsimony:
+            X_b, X_in, X_out, x_b, x_in, x_out = self.resample(residual_based = False, as_copy = True):
+            res_total_mass = np.abs(get_mass(X_out,X_in,X_b)-self.total_mass)
+            
+            res_HJB, res_KFP, res_b = self.get_loss_terms(x_out,x_in,x_b)
+            
+            
+        else:
+            res_HJB, res_KFP, res_b = self.get_loss_terms(self.X_out,self.X_in,self.X_b)
+            res_total_mass = np.abs(get_mass(self.X_out,self.X_in,self.X_b)-self.total_mass)
         
         L2_HJB = tf.reduce_mean(res_HJB)  
         L2_KFP = tf.reduce_mean(res_KFP)
@@ -258,7 +275,26 @@ class dgm_net:
         return L_tot_weighted
     
     
-    def get_loss_terms(self,X_out,X_in,X_b):
+    def get_mass(self,X_out,X_in,X_b):
+        '''
+        Computes the mass
+
+        Returns
+        -------
+        tensorflow.tensors
+            
+
+        '''
+        points = tf.Variable(tf.concat([X_out,X_in,X_b],axis = 0))            
+        phi = self.phi_theta(points)
+        gamma = self.gamma_theta(points)
+        
+        total_mass = tf.reduce_mean(phi*gamma)*(2*self.lx)*(2*self.ly)   
+        print(total_mass)
+        
+        return total_mass
+    
+     def get_loss_terms(self,X_out,X_in,X_b):
         '''
         Computes the terms of loss function by calculating the residuals at each point.
 
@@ -302,11 +338,9 @@ class dgm_net:
         
         res_b = (self.m_0 - self.phi_theta(X_b)*self.gamma_theta(X_b))**2
         
-        res_total_mass = (tf.reduce_mean(phi*gamma)*(2*self.lx)*(2*self.ly)-self.total_mass)**2
-        
-        return res_HJB, res_KFP, res_b, res_total_mass
+        return res_HJB, res_KFP, res_b
       
-    def train_step(self,verbose):
+    def train_step(self,verbose,parsimony = False):
         '''
         Applies one training to the NN in input
 
@@ -330,14 +364,14 @@ class dgm_net:
             
             f_vars = gamma_theta.trainable_weights + gamma_theta.trainable_weights
             f_tape.watch(f_vars)
-            f_loss = self.get_L2_loss(verbose)
+            f_loss = self.get_L2_loss(verbose,parsimony)
             f_grad = f_tape.gradient(f_loss,f_vars)
         
         optimizer.apply_gradients(zip(f_grad, f_vars))
         
         return f_loss
     
-    def train(self, verbose = 2, resampling = False, frequency=10, label=None):
+    def train(self, verbose = 2, resampling = False, frequency=10, label=None, parsimony = False):
         '''
         Applies self.training_steps. 
         
@@ -351,6 +385,10 @@ class dgm_net:
         None.
 
         '''
+        
+        if parsimony:
+            resampling = False
+            
         if verbose>1:
             print('      #iter         res_HJB          res_KFP          res_b            total_mass      |   Loss_total')
             print('-----------------------------------------------------------------------------------------------------')
@@ -361,19 +399,18 @@ class dgm_net:
         if not resampling:
             for step in range(1,self.training_steps + 1):
 
-
                 if step % frequency == 0 and verbose: 
                     if label==None:
                         print('{:6d}'.format(step),end="")
                     else: 
                         print('{:.2f}'.format(label),end="")
                         
-                    self.train_step(True)
+                    self.train_step(True,parsimony)
                     print('    ',end="")
                 else:
-                    self.train_step(False)
+                    self.train_step(False,parsimony)
             
-            # training with resampling
+        # training with resampling
         else:
             for step in range(1,self.training_steps + 1):
 
