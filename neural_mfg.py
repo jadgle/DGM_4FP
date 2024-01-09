@@ -184,7 +184,7 @@ class dgm_net:
     
     
     
-    def resample(self, N_big = 10000, Nb_big = 200, residual_based = True, as_copy = False):
+    def resample(self, N_big = 10000, Nb_big = 500, residual_based = True, as_copy = False):
         '''
         Residual-based adaptive refinement method with greed (RAR-G).
         
