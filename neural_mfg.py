@@ -199,27 +199,29 @@ class dgm_net:
         n_in = X_in.shape[0]
         n_out = X_out.shape[0]
         
-        if residual_based: # selection based on the PDE residuals - we collect the points performing the worst
+        if residual_based: # selection based on the PDE residuals: we collect the M worst performing points
             res_HJB, res_KFP, _ = self.get_loss_terms(X_out,X_in,X_b)
             PDEs_residual = pd.DataFrame(res_HJB.numpy() + res_KFP.numpy())
             PDEs_residual.sort_values(by=PDEs_residual.columns[0], ascending=False)
-            key = PDEs_residual
-        else: # random selection
-            points = pd.concat([X_out,X_in,X_b],axis = 0)
-            key = points.sample(n=self.M)
+            
+            X_b_new     = [] 
+            X_in_new    = []
+            X_out_new   = []
+
+            for i in range(self.M):
+                ind = key.index.values[i]
+                if  ind < n_out:
+                    X_out_new.append(X_out.iloc[ind])
+                elif ind < n_in:
+                    X_in_new.append(X_in.iloc[ind-n_out])
+                else:
+                    X_b_new.append(X_b.iloc[ind-n_out-n_in])
+                    
+        else: # random selection of M rows
+            X_out_new = X_out.sample(n=self.M)
+            X_in_new  = X_in
+            X_b_new   = X_b.sample(n=200)        
         
-        X_b_new     = [] 
-        X_in_new    = []
-        X_out_new   = []
-        
-        for i in range(self.M):
-            ind = key.index.values[i]
-            if  ind < n_out:
-                X_out_new.append(X_out.iloc[ind])
-            elif ind < n_in:
-                X_in_new.append(X_in.iloc[ind-n_out])
-            else:
-                X_b_new.append(X_b.iloc[ind-n_out-n_in])
                 
         X_out_new = pd.DataFrame(X_out_new)
         X_in_new = pd.DataFrame(X_in_new)
@@ -249,15 +251,15 @@ class dgm_net:
 
         '''
         if parsimony:
-            X_b, X_in, X_out, x_b, x_in, x_out = self.resample(residual_based = False, as_copy = True):
-            res_total_mass = np.abs(get_mass(X_out,X_in,X_b)-self.total_mass)
+            X_b, X_in, X_out, x_b, x_in, x_out = self.resample(residual_based = False, as_copy = True)
+            res_total_mass = np.abs(self.get_mass(X_out,X_in,X_b)-self.total_mass)
             
             res_HJB, res_KFP, res_b = self.get_loss_terms(x_out,x_in,x_b)
             
             
         else:
             res_HJB, res_KFP, res_b = self.get_loss_terms(self.X_out,self.X_in,self.X_b)
-            res_total_mass = np.abs(get_mass(self.X_out,self.X_in,self.X_b)-self.total_mass)
+            res_total_mass = np.abs(self.get_mass(self.X_out,self.X_in,self.X_b)-self.total_mass)
         
         L2_HJB = tf.reduce_mean(res_HJB)  
         L2_KFP = tf.reduce_mean(res_KFP)
@@ -270,31 +272,29 @@ class dgm_net:
             print('        {:10.3e}       {:10.3e}       {:10.3e}        {:10.3e}       |  {:10.3e}'.format(L2_HJB,L2_KFP,L2_b,res_total_mass, L_tot))
         
         
-        self.history.append([L_tot.numpy(),L2_HJB.numpy(),L2_KFP.numpy(),L2_b.numpy(),res_total_mass.numpy()])
+        self.history.append([L_tot.numpy(),L2_HJB.numpy(),L2_KFP.numpy(),L2_b.numpy(),res_total_mass])
         
         return L_tot_weighted
     
     
     def get_mass(self,X_out,X_in,X_b):
         '''
-        Computes the mass
+        Computes the total mass implied by the networks
 
         Returns
         -------
         tensorflow.tensors
-            
+            Total mass          
 
         '''
         points = tf.Variable(tf.concat([X_out,X_in,X_b],axis = 0))            
         phi = self.phi_theta(points)
         gamma = self.gamma_theta(points)
         
-        total_mass = tf.reduce_mean(phi*gamma)*(2*self.lx)*(2*self.ly)   
-        print(total_mass)
-        
+        total_mass = tf.reduce_mean(phi*gamma)*(2*self.lx)*(2*self.ly)           
         return total_mass
     
-     def get_loss_terms(self,X_out,X_in,X_b):
+    def get_loss_terms(self,X_out,X_in,X_b):
         '''
         Computes the terms of loss function by calculating the residuals at each point.
 
