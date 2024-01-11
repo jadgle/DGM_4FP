@@ -184,7 +184,7 @@ class dgm_net:
     
     
     
-    def resample(self, N_big = 10000, Nb_big = 500, residual_based = True, as_copy = False):
+    def resample(self, N_big = 100000, Nb_big = 1000, residual_based = True, as_copy = False):
         '''
         Residual-based adaptive refinement method with greed (RAR-G).
         
@@ -219,7 +219,7 @@ class dgm_net:
                     
         else: # random selection of M rows
             X_out_new = X_out.sample(n=self.M)
-            X_in_new  = X_in
+            X_in_new  = X_in.sample(n = min(200, X_in.shape[0]))
             X_b_new   = X_b.sample(n=200)        
         
                 
@@ -645,7 +645,7 @@ class dgm_net:
         X_b, X_in, X_out = self.sample_room(True,1,1)
         X_out = self.points_IC
         points = tf.constant(tf.concat([X_out,X_in,X_b],axis = 0))
-        res_HJB, res_KFP,  _, _ = self.get_loss_terms(X_b, X_in, X_out)
+        res_HJB, res_KFP,  _ = self.get_loss_terms(X_b, X_in, X_out)
         loss = res_HJB + res_KFP
         plt.scatter(points.numpy()[:,0], points.numpy()[:,1], c=loss, cmap='magma_r')
         cbar = plt.colorbar()
