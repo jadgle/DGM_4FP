@@ -10,7 +10,6 @@ import random
 import os
 import json
 import matplotlib
-#matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import datetime
 
@@ -131,7 +130,7 @@ class dgm_net:
         
         U0 = tf.constant(U0, dtype=self.DTYPE)
         
-        mean_field = tf.math.scalar_mul(self.g,tf.multiply(phi,gamma))
+        mean_field = self.g*phi*gamma
         
         return mean_field + U0 # formula for the potential from reference paper 
       
@@ -254,22 +253,23 @@ class dgm_net:
             X_b, X_in, X_out, x_b, x_in, x_out = self.resample(residual_based = False, as_copy = True)
             res_total_mass = np.abs(self.get_mass(X_out,X_in,X_b)-self.total_mass)
             
-            res_HJB, res_KFP, res_b = self.get_loss_terms(x_out,x_in,x_b)
+            res_HJB, res_KFP, res_b, res_obstacle = self.get_loss_terms(x_out,x_in,x_b)
             
             
         else:
-            res_HJB, res_KFP, res_b = self.get_loss_terms(self.X_out,self.X_in,self.X_b)
+            res_HJB, res_KFP, res_b, res_obstacle = self.get_loss_terms(self.X_out,self.X_in,self.X_b)
             res_total_mass = np.abs(self.get_mass(self.X_out,self.X_in,self.X_b)-self.total_mass)
         
         L2_HJB = tf.reduce_mean(res_HJB)  
         L2_KFP = tf.reduce_mean(res_KFP)
         
+        L2_obstacle = tf.reduce_mean(res_obstacle)
         L2_b = tf.reduce_mean(res_b)
         
-        L_tot = L2_HJB + L2_KFP + L2_b + res_total_mass
-        L_tot_weighted = self.weight_HJB*L2_HJB + self.weight_KFP*L2_KFP + self.weight_b*L2_b + self.weight_mass*res_total_mass
+        L_tot = L2_HJB + L2_KFP + L2_b + res_total_mass  + L2_obstacle
+        L_tot_weighted = self.weight_HJB*L2_HJB + self.weight_KFP*L2_KFP + self.weight_b*L2_b + self.weight_mass*res_total_mass + L2_obstacle
         if verbose: 
-            print('        {:10.3e}       {:10.3e}       {:10.3e}        {:10.3e}       |  {:10.3e}'.format(L2_HJB,L2_KFP,L2_b,res_total_mass, L_tot))
+            print('        {:10.3e}       {:10.3e}       {:10.3e}       {:10.3e}        {:10.3e}       |  {:10.3e}'.format(L2_HJB,L2_KFP,L2_b,L2_obstacle,res_total_mass, L_tot))
         
         
         self.history.append([L_tot.numpy(),L2_HJB.numpy(),L2_KFP.numpy(),L2_b.numpy(),res_total_mass])
@@ -338,7 +338,9 @@ class dgm_net:
         
         res_b = (self.m_0 - self.phi_theta(X_b)*self.gamma_theta(X_b))**2
         
-        return res_HJB, res_KFP, res_b
+        res_obstacle = (self.phi_theta(X_in)*self.gamma_theta(X_in))**2
+        
+        return res_HJB, res_KFP, res_b, res_obstacle
       
     def train_step(self,verbose,parsimony = False):
         '''
@@ -390,8 +392,8 @@ class dgm_net:
             resampling = False
             
         if verbose>1:
-            print('      #iter         res_HJB          res_KFP          res_b            total_mass      |   Loss_total')
-            print('-----------------------------------------------------------------------------------------------------')
+            print('      #iter         res_HJB          res_KFP          res_b           res_obs          total_mass      |   Loss_total')
+            print('---------------------------------------------------------------------------------------------------------------------------')
             print('    ',end="")
             
 
@@ -506,24 +508,17 @@ class dgm_net:
         return f_loss
     
     
-    def warmstart(self,phi_IC,gamma_IC):
+    def warmstart(self):
         '''
-        Applies self.training_steps of warmstart
-
-        Parameters
-        ----------
-        phi_IC : numpy.array
-            Values of the exact solution for Phi reshaped as (nx*ny,1).
-        gamma_IC : numpy.array
-            Values of the exact solution for Gamma reshaped as (nx*ny,1)..
-        points_IC : numpy.array
-            Coordinates of the exact solution's grid reshaped as (nx*ny,1).
+        Applies self.training_steps of warmstart w.r.t. reference finite difference solution 
 
         Returns
         -------
         None.
 
         '''
+        gamma_IC = np.loadtxt("IC/gamma.txt",ndmin=2)
+        phi_IC = np.loadtxt("IC/phi.txt",ndmin=2)
         phi_loss = 1
         gamma_loss = 1
         step = 0
@@ -645,7 +640,7 @@ class dgm_net:
         X_b, X_in, X_out = self.sample_room(True,1,1)
         X_out = self.points_IC
         points = tf.constant(tf.concat([X_out,X_in,X_b],axis = 0))
-        res_HJB, res_KFP,  _ = self.get_loss_terms(X_b, X_in, X_out)
+        res_HJB, res_KFP,  _, _ = self.get_loss_terms(X_b, X_in, X_out)
         loss = res_HJB + res_KFP
         plt.scatter(points.numpy()[:,0], points.numpy()[:,1], c=loss, cmap='magma_r')
         cbar = plt.colorbar()
