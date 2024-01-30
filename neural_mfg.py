@@ -253,7 +253,7 @@ class dgm_net:
         '''
         if parsimony:
             X_b, X_in, X_out, x_b, x_in, x_out = self.resample(residual_based = False, as_copy = True)
-            res_total_mass = np.abs(self.get_mass(X_out,X_in,X_b)-self.total_mass)
+            res_total_mass = (self.get_mass(X_out,X_in,X_b)-self.total_mass)**2
             
             res_HJB, res_KFP, res_b, res_obstacle = self.get_loss_terms(x_out,x_in,x_b)
             
@@ -509,6 +509,39 @@ class dgm_net:
         
         return f_loss
     
+    def warmstart_step_gaussian(self,phi_theta,gamma_theta,all_pts):
+        '''
+        One step of warmstart with simple IC
+
+        Parameters
+        ----------
+        f_theta : dgmnet
+            The net to which apply one step of warmstart.
+
+        Returns
+        -------
+        f_loss : tf.tensor
+            The value of the loss after one step of ws.
+
+        '''
+        
+        
+        optimizer = tf.optimizers.Adam(learning_rate = self.learning_rate)
+        
+        # Compute gradient wrt variables for phi and gamma together
+        with tf.GradientTape() as f_tape:
+            
+            f_vars = gamma_theta.trainable_weights + gamma_theta.trainable_weights
+            f_tape.watch(f_vars)
+            f_prediction = gamma_theta(all_pts)*phi_theta(all_pts)
+            gaussian = np.exp(-all_pts[:,0]**2-all_pts[:,1]**2)+self.m_0
+            f_loss = tf.reduce_mean((f_prediction - gaussian)**2)
+            f_grad = f_tape.gradient(f_loss,f_vars)
+            
+        optimizer.apply_gradients(zip(f_grad, f_vars))
+        
+        return f_loss
+    
     
     def warmstart(self):
         '''
@@ -566,6 +599,35 @@ class dgm_net:
             
             step +=1
         print('WS step {:5d}, loss phi={:10.3e}, loss gamma={:10.3e}'.format(step, phi_loss,gamma_loss))
+        
+    def warmstart_gaussian(self,verbose=True):
+        '''
+        Simple warmstart towards gaussian.        
+
+        Parameters
+        ----------
+        verbose : Bool, optional
+            Shows info bout the simple warmstart. The default is True.
+
+        Returns
+        -------
+        None.
+
+        '''
+        phi_loss = 1
+        gamma_loss = 1
+        step = 0
+
+        while np.maximum(phi_loss,gamma_loss) > 10e-4:
+            
+            # Compute loss for phi and gamma
+            loss = self.warmstart_step_gaussian(self.phi_theta,self.gamma_theta,self.all_pts)
+
+            if step % 100 == 0:
+                print('WS step {:5d}, loss ={:10.3e}'.format(step, loss))
+            
+            step +=1
+        print('WS step {:5d}, loss ={:10.3e}'.format(step, loss))
             
     def draw(self, IC_points=False, saving=False, directory=None):
         '''
