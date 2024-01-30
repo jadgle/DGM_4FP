@@ -68,7 +68,9 @@ class dgm_net:
         self.N_in = int(var['room']['N_in'])
         
         # Initial total mass
-        self.total_mass = tf.constant(self.m_0*(2*self.lx)*(2*self.ly)-np.pi*self.R**2,dtype=self.DTYPE)
+        self.gamma_ref = np.loadtxt("IC/gamma.txt",dtype=self.DTYPE,ndmin=2)
+        self.phi_ref = np.loadtxt("IC/phi.txt",dtype=self.DTYPE,ndmin=2)
+        self.total_mass = tf.constant(tf.reduce_mean(self.phi_ref*self.gamma_ref)*(2*self.lx)*(2*self.ly),dtype=self.DTYPE)
         
         # Seed value
         self.seed_value = 0
@@ -258,13 +260,13 @@ class dgm_net:
             
         else:
             res_HJB, res_KFP, res_b, res_obstacle = self.get_loss_terms(self.X_out,self.X_in,self.X_b)
-            res_total_mass = np.abs(self.get_mass(self.X_out,self.X_in,self.X_b)-self.total_mass)
+            res_total_mass = (self.get_mass(self.X_out,self.X_in,self.X_b)-self.total_mass)**2
         
-        L2_HJB = tf.reduce_mean(res_HJB)  
-        L2_KFP = tf.reduce_mean(res_KFP)
+        L2_HJB = tf.reduce_mean(res_HJB**2)  
+        L2_KFP = tf.reduce_mean(res_KFP**2)
         
-        L2_obstacle = tf.reduce_mean(res_obstacle)
-        L2_b = tf.reduce_mean(res_b)
+        L2_obstacle = tf.reduce_mean(res_obstacle**2)
+        L2_b = tf.reduce_mean(res_b**2)
         
         L_tot = L2_HJB + L2_KFP + L2_b + res_total_mass  + L2_obstacle
         L_tot_weighted = self.weight_HJB*L2_HJB + self.weight_KFP*L2_KFP + self.weight_b*L2_b + self.weight_mass*res_total_mass + L2_obstacle
@@ -625,10 +627,10 @@ class dgm_net:
             col = cols-1
             ax[col//2,col%2].plot(history[:,cols])
             ax[col//2,col%2].set_title(labels[col])        
-        plt.show()
         if saving:
             plt.savefig('./trainings/' + directory + '/residuals')
-            
+        plt.show()
+        
         # "loss_in_room"
         plt.figure(figsize=(10,10))
         plt.xlabel('$x$')
@@ -646,10 +648,9 @@ class dgm_net:
         cbar = plt.colorbar()
         cbar.ax.tick_params(labelsize=30) 
         plt.title("L2 loss in space")
-        plt.show()
         if saving:
             plt.savefig('./trainings/' + directory + '/loss_in_room')
-            
+        plt.show()
             
         # "dgm_vs_ref"
         plt.figure(figsize=(10,10))
@@ -659,19 +660,16 @@ class dgm_net:
         plt.xticks(np.arange(-2, 2.1, 2),fontsize=30)
         plt.box(False)
             
-        gamma_ref = np.loadtxt("IC/gamma.txt",ndmin=2)
-        phi_ref = np.loadtxt("IC/phi.txt",ndmin=2)
-        m_ref = gamma_ref*phi_ref
+        m_ref = self.gamma_ref*self.phi_ref
         m_dgm = self.gamma_theta(self.points_IC)*self.phi_theta(self.points_IC) 
         discrepancy = np.absolute(m_ref-m_dgm)
         plt.scatter(self.points_IC[:,0], self.points_IC[:,1], s=13, c=discrepancy, cmap='magma_r')
         cbar = plt.colorbar()
         cbar.ax.tick_params(labelsize=30) 
         plt.title("Discrepancy vs Finite Difference solution")
-        plt.show() 
         if saving:
             plt.savefig('./trainings/' + directory + '/dgm_vs_ref')
-        
+        plt.show() 
         
         
     def save(self):
