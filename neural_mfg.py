@@ -531,7 +531,7 @@ class dgm_net:
         # Compute gradient wrt variables for phi and gamma together
         with tf.GradientTape() as f_tape:
             
-            f_vars = gamma_theta.trainable_weights + gamma_theta.trainable_weights
+            f_vars = gamma_theta.trainable_weights + phi_theta.trainable_weights
             f_tape.watch(f_vars)
             f_prediction = gamma_theta(all_pts)*phi_theta(all_pts)
             gaussian = np.exp(-all_pts[:,0]**2-all_pts[:,1]**2)+self.m_0

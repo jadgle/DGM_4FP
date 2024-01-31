@@ -210,7 +210,7 @@ class DGMNet(tf.keras.Model):
             self.DenseLayerList.append(DenseLayer(layer_width, layer_width, activation = sigma))     
 
         # define final layer as fully connected with a single output (function value)
-        self.final_layer = DenseLayer(1, layer_width, activation="relu")
+        self.final_layer = DenseLayer(1, layer_width, activation="elu")
 
     # main function to be called
     def call(self, x):
