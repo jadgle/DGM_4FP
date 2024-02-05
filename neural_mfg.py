@@ -366,7 +366,7 @@ class dgm_net:
         
         with tf.GradientTape() as f_tape:
             
-            f_vars = gamma_theta.trainable_weights + gamma_theta.trainable_weights
+            f_vars = gamma_theta.trainable_weights + phi_theta.trainable_weights
             f_tape.watch(f_vars)
             f_loss = self.get_L2_loss(verbose,parsimony)
             f_grad = f_tape.gradient(f_loss,f_vars)
@@ -527,6 +527,7 @@ class dgm_net:
         
         
         optimizer = tf.optimizers.Adam(learning_rate = self.learning_rate)
+        gaussian = np.exp(-all_pts[:,0]**2-all_pts[:,1]**2)+self.m_0
         
         # Compute gradient wrt variables for phi and gamma together
         with tf.GradientTape() as f_tape:
@@ -534,7 +535,6 @@ class dgm_net:
             f_vars = gamma_theta.trainable_weights + phi_theta.trainable_weights
             f_tape.watch(f_vars)
             f_prediction = gamma_theta(all_pts)*phi_theta(all_pts)
-            gaussian = np.exp(-all_pts[:,0]**2-all_pts[:,1]**2)+self.m_0
             f_loss = tf.reduce_mean((f_prediction - gaussian)**2)
             f_grad = f_tape.gradient(f_loss,f_vars)
             

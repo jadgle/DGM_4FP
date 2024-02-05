@@ -28,34 +28,34 @@ class LSTMLayer(tf.keras.layers.Layer):
         self.input_dim = input_dim
 
         if trans1 == "tanh":
-            self.trans1 = tf.nn.tanh
+            self.trans1 = tf.keras.activations.tanh
         elif trans1 == "relu":
-            self.trans1 = tf.nn.relu
+            self.trans1 = tf.keras.activations.relu
         elif trans1 == "sigmoid":
-            self.trans1 = tf.nn.sigmoid
+            self.trans1 = tf.keras.activations.sigmoid
         elif trans1 == "softmax":
-            self.trans1 = tf.nn.softmax
+            self.trans1 = tf.keras.activations.softmax
         elif trans1 == "softplus":
-            self.trans1 = tf.nn.softplus
+            self.trans1 = tf.keras.activations.softplus
         elif trans1 == "elu":
-            self.trans1 = tf.nn.elu
+            self.trans1 = tf.keras.activations.elu
         elif trans1 == "selu":
-            self.trans1 = tf.nn.selu
+            self.trans1 = tf.keras.activations.selu
 
         if trans2 == "tanh":
-            self.trans2 = tf.nn.tanh
+            self.trans2 = tf.keras.activations.tanh
         elif trans2 == "relu":
-            self.trans2 = tf.nn.relu
+            self.trans2 = tf.keras.activations.relu
         elif trans2 == "sigmoid":
-            self.trans2 = tf.nn.relu
+            self.trans2 = tf.keras.activations.sigmoid
         elif trans2 == "softmax":
-            self.trans = tf.nn.softmax
+            self.trans2 = tf.keras.activations.softmax
         elif trans2 == "softplus":
-            self.trans2 = tf.nn.softplus
+            self.trans2 = tf.keras.activations.softplus
         elif trans2 == "elu":
-            self.trans2 = tf.nn.elu
+            self.trans2 = tf.keras.activations.elu
         elif trans2 == "selu":
-            self.trans2 = tf.nn.selu
+            self.trans2 = tf.keras.activations.selu
 
 
         ### define LSTM layer parameters (use Xavier initialization)
@@ -140,19 +140,19 @@ class DenseLayer(tf.keras.layers.Layer):
 
         if activation:
             if activation == "tanh":
-                self.activation = tf.tanh
+                self.activation = tf.keras.activations.tanh
             elif activation == "relu":
-                self.activation = tf.nn.relu
+                self.activation = tf.keras.activations.relu
             elif activation == "sigmoid":
-                self.activation = tf.nn.relu
+                self.activation = tf.keras.activations.sigmoid
             elif activation == "softmax":
-                self.activation = tf.nn.softmax
+                self.activation = tf.keras.activations.softmax
             elif activation == "softplus":
-                self.activation = tf.nn.softplus
+                self.activation = tf.keras.activations.softplus
             elif activation == "elu":
-                self.activation = tf.nn.elu
+                self.activation = tf.keras.activations.elu
             elif activation == "selu":
-                self.activation = tf.nn.selu
+                self.activation = tf.keras.activations.selu
         else:
             self.activation = activation
 
