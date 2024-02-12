@@ -210,7 +210,7 @@ class dgm_net:
             X_out_new   = []
 
             for i in range(self.M):
-                ind = key.index.values[i]
+                ind = PDEs_residual.index.values[i]
                 if  ind < n_out:
                     X_out_new.append(X_out.iloc[ind])
                 elif ind < n_in:
@@ -509,7 +509,7 @@ class dgm_net:
         
         return f_loss
     
-    def warmstart_step_gaussian(self,phi_theta,gamma_theta,all_pts):
+    def warmstart_step_gaussian(self):
         '''
         One step of warmstart with simple IC
 
@@ -527,14 +527,14 @@ class dgm_net:
         
         
         optimizer = tf.optimizers.Adam(learning_rate = self.learning_rate)
-        gaussian = np.exp(-all_pts[:,0]**2-all_pts[:,1]**2)+self.m_0
+        gaussian = np.exp(-self.all_pts[:,0]**2-self.all_pts[:,1]**2)+self.m_0
         
         # Compute gradient wrt variables for phi and gamma together
         with tf.GradientTape() as f_tape:
             
-            f_vars = gamma_theta.trainable_weights + phi_theta.trainable_weights
+            f_vars = self.gamma_theta.trainable_weights + self.phi_theta.trainable_weights
             f_tape.watch(f_vars)
-            f_prediction = gamma_theta(all_pts)*phi_theta(all_pts)
+            f_prediction = self.gamma_theta(self.all_pts)*self.phi_theta(self.all_pts)
             f_loss = tf.reduce_mean((f_prediction - gaussian)**2)
             f_grad = f_tape.gradient(f_loss,f_vars)
             
@@ -621,7 +621,7 @@ class dgm_net:
         while np.maximum(phi_loss,gamma_loss) > 10e-4:
             
             # Compute loss for phi and gamma
-            loss = self.warmstart_step_gaussian(self.phi_theta,self.gamma_theta,self.all_pts)
+            loss = self.warmstart_step_gaussian()
 
             if step % 100 == 0:
                 print('WS step {:5d}, loss ={:10.3e}'.format(step, loss))
