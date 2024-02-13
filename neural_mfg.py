@@ -102,7 +102,7 @@ class dgm_net:
         self.X_b, self.X_out = self.sample_room()
         
         self.all_pts   = tf.constant(tf.concat([self.X_out,self.X_b],axis = 0))
-        self.points_IC = np.loadtxt("IC/points.txt")
+        self.points_IC = np.loadtxt("IC/points.txt", dtype=self.DTYPE)
         
         self.history = []
     
@@ -691,8 +691,9 @@ class dgm_net:
         X_b, _ = self.sample_room(True,1,1)
         points_out = tf.where(tf.norm(self.points_IC, axis=1) > self.R)
         X_out = tf.gather(self.points_IC, points_out)
+        X_out = tf.squeeze(X_out)
         points = tf.constant(tf.concat([X_out,X_b],axis = 0))
-        res_HJB, res_KFP,  _, _ = self.get_loss_terms(X_b, X_out)
+        res_HJB, res_KFP,  _ = self.get_loss_terms(X_b, X_out)
         loss = res_HJB + res_KFP
         plt.scatter(points.numpy()[:,0], points.numpy()[:,1], c=loss, cmap='magma_r')
         cbar = plt.colorbar()
