@@ -638,7 +638,7 @@ class dgm_net:
             
         else: 
             m = self.gamma_theta(self.points_IC)*self.phi_theta(self.points_IC)
-            points_in = tf.where(tf.norm(self.points_IC, axis=1) <= self.R)
+            points_in = tf.where(tf.norm(self.points_IC, axis=1) < self.R)
             m = m.numpy()
             m[points_in.numpy()]=0
             plt.scatter(self.points_IC[:,0], self.points_IC[:,1], s=13, c=m, cmap='hot_r')
@@ -689,7 +689,7 @@ class dgm_net:
         plt.box(False)
         
         X_b, _ = self.sample_room(True,1,1)
-        points_out = tf.where(tf.norm(self.points_IC, axis=1) > self.R)
+        points_out = tf.where(tf.norm(self.points_IC, axis=1) >= self.R)
         X_out = tf.gather(self.points_IC, points_out)
         X_out = tf.squeeze(X_out)
         points = tf.constant(tf.concat([X_out,X_b],axis = 0))
@@ -713,6 +713,7 @@ class dgm_net:
             
         m_ref = self.gamma_ref*self.phi_ref
         m_dgm = self.gamma_theta(self.points_IC)*self.phi_theta(self.points_IC)
+        points_in = tf.where(tf.norm(self.points_IC, axis=1) < self.R)
         m_dgm = m_dgm.numpy()
         m_dgm[points_in.numpy()]=0
         
