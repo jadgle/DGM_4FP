@@ -660,10 +660,10 @@ class dgm_net:
         cbar.ax.tick_params(labelsize=30) 
         plt.clim(vmin = 0)    
         
-        plt.show()   
+           
         if saving:
                 plt.savefig('./trainings/' + directory + '/solution_m')
-                
+        plt.show()        
                 
         
     def error_plots(self, saving=False, directory=None):
