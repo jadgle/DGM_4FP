@@ -99,9 +99,9 @@ class dgm_net:
                                 var['dgm_params']['FNN_layers'], 2,
                                 var['dgm_params']['activation'])
         
-        self.X_b, self.X_in, self.X_out = self.sample_room()
+        self.X_b, self.X_out = self.sample_room()
         
-        self.all_pts   = tf.constant(tf.concat([self.X_out,self.X_in,self.X_b],axis = 0))
+        self.all_pts   = tf.constant(tf.concat([self.X_out,self.X_b],axis = 0))
         self.points_IC = np.loadtxt("IC/points.txt")
         
         self.history = []
@@ -165,11 +165,8 @@ class dgm_net:
         X_room = tf.concat([x_room, y_room], axis=1)
         
         # Divide between points inside and outside the cylinder
-        points_in = tf.where(tf.norm(X_room, axis=1) <= self.R)
         points_out = tf.where(tf.norm(X_room, axis=1) > self.R)
-        X_in = tf.gather(X_room, points_in)
         X_out = tf.gather(X_room, points_out)
-        X_in = tf.squeeze(X_in)
         X_out = tf.squeeze(X_out)
     
         # Boundary data (square - outside walls)
@@ -181,7 +178,7 @@ class dgm_net:
         y_b = tf.concat([y_b1, y_b2], axis=0)
         X_b = tf.concat([x_b, y_b], axis=1)
 
-        return pd.DataFrame(X_b.numpy()), pd.DataFrame(X_in.numpy()), pd.DataFrame(X_out.numpy())
+        return pd.DataFrame(X_b.numpy()), pd.DataFrame(X_out.numpy())
     
     
     
@@ -195,49 +192,41 @@ class dgm_net:
         Such new points are selected to be the M ones performing the worst in terms of PDE residual
 
         '''
-        X_b, X_in, X_out = self.sample_room(True,N_big,Nb_big)
+        X_b, X_out = self.sample_room(True,N_big,Nb_big)
 
-        n_in = X_in.shape[0]
         n_out = X_out.shape[0]
         
         if residual_based: # selection based on the PDE residuals: we collect the M worst performing points
-            res_HJB, res_KFP, _ = self.get_loss_terms(X_out,X_in,X_b)
+            res_HJB, res_KFP, _ = self.get_loss_terms(X_out,X_b)
             PDEs_residual = pd.DataFrame(res_HJB.numpy() + res_KFP.numpy())
             PDEs_residual.sort_values(by=PDEs_residual.columns[0], ascending=False)
             
             X_b_new     = [] 
-            X_in_new    = []
             X_out_new   = []
 
             for i in range(self.M):
                 ind = PDEs_residual.index.values[i]
                 if  ind < n_out:
                     X_out_new.append(X_out.iloc[ind])
-                elif ind < n_in:
-                    X_in_new.append(X_in.iloc[ind-n_out])
                 else:
-                    X_b_new.append(X_b.iloc[ind-n_out-n_in])
+                    X_b_new.append(X_b.iloc[ind-n_out])
                     
         else: # random selection of M rows
             X_out_new = X_out.sample(n=self.M)
-            X_in_new  = X_in.sample(n = min(200, X_in.shape[0]))
             X_b_new   = X_b.sample(n=200)        
         
                 
         X_out_new = pd.DataFrame(X_out_new)
-        X_in_new = pd.DataFrame(X_in_new)
         X_b_new = pd.DataFrame(X_b_new)
         
         if as_copy:
-            return X_b, X_in, X_out, X_b_new, X_in_new, X_out_new
+            return X_b, X_out, X_b_new, X_out_new
         else:
             self.X_out = pd.concat([self.X_out, X_out_new], ignore_index=True)
-            self.X_in  = pd.concat([self.X_in, X_in_new], ignore_index=True)
             self.X_b   = pd.concat([self.X_b, X_b_new], ignore_index=True)
 
-            self.N_in  = self.X_in.shape[0] + self.X_out.shape[0]
             self.N_b   = self.X_b.shape[0]
-            self.all_pts   = tf.constant(tf.concat([self.X_out,self.X_in,self.X_b],axis = 0))
+            self.all_pts   = tf.constant(tf.concat([self.X_out,self.X_b],axis = 0))
             return
             
     
@@ -252,26 +241,23 @@ class dgm_net:
 
         '''
         if parsimony:
-            X_b, X_in, X_out, x_b, x_in, x_out = self.resample(residual_based = False, as_copy = True)
-            res_total_mass = (self.get_mass(X_out,X_in,X_b)-self.total_mass)**2
-            
-            res_HJB, res_KFP, res_b, res_obstacle = self.get_loss_terms(x_out,x_in,x_b)
-            
+            X_b, X_out, x_b_batch, x_out_batch = self.resample(residual_based = False, as_copy = True)
+            res_total_mass = (self.get_mass(X_out,X_b)-self.total_mass)**2
+            res_HJB, res_KFP, res_b = self.get_loss_terms(x_out_batch,x_b_batch)
             
         else:
-            res_HJB, res_KFP, res_b, res_obstacle = self.get_loss_terms(self.X_out,self.X_in,self.X_b)
-            res_total_mass = (self.get_mass(self.X_out,self.X_in,self.X_b)-self.total_mass)**2
+            res_HJB, res_KFP, res_b = self.get_loss_terms(self.X_out,self.X_b)
+            res_total_mass = (self.get_mass(self.X_out,self.X_b)-self.total_mass)**2
         
         L2_HJB = tf.reduce_mean(res_HJB**2)  
         L2_KFP = tf.reduce_mean(res_KFP**2)
         
-        L2_obstacle = tf.reduce_mean(res_obstacle**2)
         L2_b = tf.reduce_mean(res_b**2)
         
-        L_tot = L2_HJB + L2_KFP + L2_b + res_total_mass  + L2_obstacle
-        L_tot_weighted = self.weight_HJB*L2_HJB + self.weight_KFP*L2_KFP + self.weight_b*L2_b + self.weight_mass*res_total_mass + L2_obstacle
+        L_tot = L2_HJB + L2_KFP + L2_b + res_total_mass
+        L_tot_weighted = self.weight_HJB*L2_HJB + self.weight_KFP*L2_KFP + self.weight_b*L2_b + self.weight_mass*res_total_mass 
         if verbose: 
-            print('        {:10.3e}       {:10.3e}       {:10.3e}       {:10.3e}        {:10.3e}       |  {:10.3e}'.format(L2_HJB,L2_KFP,L2_b,L2_obstacle,res_total_mass, L_tot))
+            print('        {:10.3e}       {:10.3e}       {:10.3e}        {:10.3e}       |  {:10.3e}'.format(L2_HJB,L2_KFP,L2_b,res_total_mass, L_tot))
         
         
         self.history.append([L_tot.numpy(),L2_HJB.numpy(),L2_KFP.numpy(),L2_b.numpy(),res_total_mass])
@@ -279,7 +265,7 @@ class dgm_net:
         return L_tot_weighted
     
     
-    def get_mass(self,X_out,X_in,X_b):
+    def get_mass(self,X_out,X_b):
         '''
         Computes the total mass implied by the networks
 
@@ -289,14 +275,14 @@ class dgm_net:
             Total mass          
 
         '''
-        points = tf.Variable(tf.concat([X_out,X_in,X_b],axis = 0))            
+        points = tf.Variable(tf.concat([X_out,X_b],axis = 0))            
         phi = self.phi_theta(points)
         gamma = self.gamma_theta(points)
         
         total_mass = tf.reduce_mean(phi*gamma)*(2*self.lx)*(2*self.ly)           
         return total_mass
     
-    def get_loss_terms(self,X_out,X_in,X_b):
+    def get_loss_terms(self,X_out,X_b):
         '''
         Computes the terms of loss function by calculating the residuals at each point.
 
@@ -306,7 +292,7 @@ class dgm_net:
             Loss function terms of the different residuals. The default is True.
 
         '''
-        points = tf.Variable(tf.concat([X_out,X_in,X_b],axis = 0))
+        points = tf.Variable(tf.concat([X_out,X_b],axis = 0))
         
         # Compute gradient and laplacian for Phi
         
@@ -340,9 +326,7 @@ class dgm_net:
         
         res_b = (self.m_0 - self.phi_theta(X_b)*self.gamma_theta(X_b))**2
         
-        res_obstacle = (self.phi_theta(X_in)*self.gamma_theta(X_in))**2
-        
-        return res_HJB, res_KFP, res_b, res_obstacle
+        return res_HJB, res_KFP, res_b
       
     def train_step(self,verbose,parsimony = False):
         '''
@@ -394,7 +378,7 @@ class dgm_net:
             resampling = False
             
         if verbose>1:
-            print('      #iter         res_HJB          res_KFP          res_b           res_obs          total_mass      |   Loss_total')
+            print('      #iter         res_HJB          res_KFP          res_b          total_mass      |   Loss_total')
             print('---------------------------------------------------------------------------------------------------------------------------')
             print('    ',end="")
             
@@ -641,7 +625,7 @@ class dgm_net:
         None.
 
         '''
-        plt.figure(figsize=(10,10))
+        plt.figure(figsize=(6,6))
         plt.xlabel('$x$')
         plt.ylabel('$y$')
         plt.yticks(np.arange(-2, 2.1, 2),fontsize=30)
@@ -649,11 +633,14 @@ class dgm_net:
         plt.box(False)
             
         if not IC_points:
-            m = self.gamma_theta(self.all_pts)*self.phi_theta(self.all_pts)           
+            m = self.gamma_theta(self.all_pts)*self.phi_theta(self.all_pts)      
             plt.scatter(self.all_pts.numpy()[:,0], self.all_pts.numpy()[:,1], c=m, cmap='hot_r')
             
         else: 
-            m = self.gamma_theta(self.points_IC)*self.phi_theta(self.points_IC)            
+            m = self.gamma_theta(self.points_IC)*self.phi_theta(self.points_IC)
+            points_in = tf.where(tf.norm(self.points_IC, axis=1) <= self.R)
+            m = m.numpy()
+            m[points_in.numpy()]=0
             plt.scatter(self.points_IC[:,0], self.points_IC[:,1], s=13, c=m, cmap='hot_r')
         
         cbar = plt.colorbar()
@@ -683,7 +670,7 @@ class dgm_net:
         # "residuals"         
         labels = ['res_HJB', 'res_KFP', 'res_b', 'res_total_mass']
         history = np.array(self.history)
-        fig, ax = plt.subplots(nrows = 2,ncols=2,figsize = (15,10))
+        fig, ax = plt.subplots(nrows = 2,ncols=2,figsize = (12,8))
 
         for cols in range(1,history.shape[1]):
             col = cols-1
@@ -694,17 +681,18 @@ class dgm_net:
         plt.show()
         
         # "loss_in_room"
-        plt.figure(figsize=(10,10))
+        plt.figure(figsize=(8,8))
         plt.xlabel('$x$')
         plt.ylabel('$y$')
         plt.yticks(np.arange(-2, 2.1, 2),fontsize=30)
         plt.xticks(np.arange(-2, 2.1, 2),fontsize=30)
         plt.box(False)
         
-        X_b, X_in, X_out = self.sample_room(True,1,1)
-        X_out = self.points_IC
-        points = tf.constant(tf.concat([X_out,X_in,X_b],axis = 0))
-        res_HJB, res_KFP,  _, _ = self.get_loss_terms(X_b, X_in, X_out)
+        X_b, _ = self.sample_room(True,1,1)
+        points_out = tf.where(tf.norm(self.points_IC, axis=1) > self.R)
+        X_out = tf.gather(self.points_IC, points_out)
+        points = tf.constant(tf.concat([X_out,X_b],axis = 0))
+        res_HJB, res_KFP,  _, _ = self.get_loss_terms(X_b, X_out)
         loss = res_HJB + res_KFP
         plt.scatter(points.numpy()[:,0], points.numpy()[:,1], c=loss, cmap='magma_r')
         cbar = plt.colorbar()
@@ -723,8 +711,11 @@ class dgm_net:
         plt.box(False)
             
         m_ref = self.gamma_ref*self.phi_ref
-        m_dgm = self.gamma_theta(self.points_IC)*self.phi_theta(self.points_IC) 
-        discrepancy = np.absolute(m_ref-m_dgm)
+        m_dgm = self.gamma_theta(self.points_IC)*self.phi_theta(self.points_IC)
+        m_dgm = m_dgm.numpy()
+        m_dgm[points_in.numpy()]=0
+        
+        discrepancy = (m_ref-m_dgm)**2
         plt.scatter(self.points_IC[:,0], self.points_IC[:,1], s=13, c=discrepancy, cmap='magma_r')
         cbar = plt.colorbar()
         cbar.ax.tick_params(labelsize=30) 
